@@ -88,79 +88,37 @@
 </head>
 <body>
     <div class="container">
-        <h1>
-            🧙‍♂️ Gandalf System Health
-            <button class="refresh-btn" onclick="checkAllHealth()">Refresh</button>
-        </h1>
-
+        <h1>🧙‍♂️ Gandalf System Health <button class="refresh-btn" onclick="checkAllHealth()">Refresh</button></h1>
         <div class="health-grid" id="health-grid">
-            <div class="health-card" id="collector-status">
-                <h3>Data Collector</h3>
-                <div class="status-icon">⏳</div>
-                <div class="metric">Checking...</div>
-            </div>
-            <div class="health-card" id="analyzer-status">
-                <h3>Pattern Analyzer</h3>
-                <div class="status-icon">⏳</div>
-                <div class="metric">Checking...</div>
-            </div>
-            <div class="health-card" id="monitor-status">
-                <h3>System Monitor</h3>
-                <div class="status-icon">⏳</div>
-                <div class="metric">Checking...</div>
-            </div>
-            <div class="health-card" id="database-status">
-                <h3>Database</h3>
-                <div class="status-icon">⏳</div>
-                <div class="metric">Checking...</div>
-            </div>
+            <div class="health-card" id="collector-status"><h3>Data Collector</h3><div class="status-icon">⏳</div><div class="metric">Checking...</div></div>
+            <div class="health-card" id="analyzer-status"><h3>Pattern Analyzer</h3><div class="status-icon">⏳</div><div class="metric">Checking...</div></div>
+            <div class="health-card" id="monitor-status"><h3>System Monitor</h3><div class="status-icon">⏳</div><div class="metric">Checking...</div></div>
+            <div class="health-card" id="database-status"><h3>Database</h3><div class="status-icon">⏳</div><div class="metric">Checking...</div></div>
         </div>
-
         <h2>System Metrics</h2>
         <div class="health-grid" id="metrics-grid">
-            <div class="health-card">
-                <h3>Data Points (Total)</h3>
-                <div class="metric" id="data-points">-</div>
-            </div>
-            <div class="health-card">
-                <h3>Patterns Found (Total)</h3>
-                <div class="metric" id="patterns-found">-</div>
-            </div>
-            <div class="health-card">
-                <h3>Active Signals (Cache)</h3>
-                <div class="metric" id="active-signals">-</div>
-            </div>
-            <div class="health-card">
-                <h3>Last Collection</h3>
-                <div class="metric" id="last-collection">-</div>
-            </div>
+            <div class="health-card"><h3>Data Points (Total)</h3><div class="metric" id="data-points">-</div></div>
+            <div class="health-card"><h3>Patterns Found (Total)</h3><div class="metric" id="patterns-found">-</div></div>
+            <div class="health-card"><h3>Active Signals (Cache)</h3><div class="metric" id="active-signals">-</div></div>
+            <div class="health-card"><h3>Last Collection</h3><div class="metric" id="last-collection">-</div></div>
         </div>
-
         <h2>Recent Logs (Simulated)</h2>
-        <div class="logs" id="logs">
-            <div>Loading logs...</div>
-        </div>
+        <div class="logs" id="logs"><div>Loading logs...</div></div>
     </div>
-
     <script>
-        // NEW SECURE WAY: All requests go through our own API gateway
         const API_BASE_URL = '/api';
 
         async function checkHealth(service, url) {
             const card = document.getElementById(`${service}-status`);
             try {
-                // For internal services, we can call them directly
-                const externalUrl = `https://${service}.psnedujime.workers.dev`;
-                const response = await fetch(externalUrl);
+                const response = await fetch(url);
                 const data = await response.json();
-
                 if (response.ok && (data.status === 'healthy' || data.healthy)) {
                     card.className = 'health-card healthy';
                     card.querySelector('.status-icon').textContent = '✅';
                     card.querySelector('.metric').textContent = 'Operational';
-                    if (service === 'collector' && data.last_collection_timestamp) {
-                        const age = Math.round((Date.now() - new Date(data.last_collection_timestamp).getTime()) / 60000);
-                        document.getElementById('last-collection').textContent = `${age} min ago`;
+                    if (service === 'gandalf-collector' && data.last_collection_age_minutes != null) {
+                        document.getElementById('last-collection').textContent = `${data.last_collection_age_minutes} min ago`;
                     }
                 } else {
                     card.className = 'health-card warning';
@@ -177,7 +135,6 @@
         async function checkDatabaseHealth() {
             const card = document.getElementById('database-status');
             try {
-                // UPDATED: Use the API Gateway for this request
                 const response = await fetch(`${API_BASE_URL}/market_data?select=timestamp&order=timestamp.desc&limit=1`);
                 if (response.ok) {
                     card.className = 'health-card healthy';
@@ -195,21 +152,17 @@
 
         async function loadMetrics() {
             try {
-                // Total Data Points
                 const dpResponse = await fetch(`${API_BASE_URL}/market_data?select=count`, { headers: { 'Range-Unit': 'items', 'Range': '0-1' } });
                 const dpCount = dpResponse.headers.get('content-range').split('/')[1];
                 document.getElementById('data-points').textContent = dpCount || '-';
 
-                // Total Patterns
                 const pResponse = await fetch(`${API_BASE_URL}/discovered_patterns?select=count`, { headers: { 'Range-Unit': 'items', 'Range': '0-1' } });
                 const pCount = pResponse.headers.get('content-range').split('/')[1];
                 document.getElementById('patterns-found').textContent = pCount || '-';
 
-                // Active Signals from Analyzer Cache
                 const sigResponse = await fetch(`${API_BASE_URL}/signals`);
                 const signals = await sigResponse.json();
                 document.getElementById('active-signals').textContent = signals.length;
-
             } catch (error) {
                 console.error('Error loading metrics:', error);
             }
@@ -228,7 +181,6 @@
         }
 
         async function checkAllHealth() {
-            // Check each service in parallel
             await Promise.all([
                 checkHealth('gandalf-collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
                 checkHealth('gandalf-analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
@@ -239,7 +191,6 @@
             ]);
         }
 
-        // Check on load and every 30 seconds
         checkAllHealth();
         setInterval(checkAllHealth, 30000);
     </script>

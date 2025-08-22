@@ -3,7 +3,7 @@ TITLE Gandalf Full Redeployment Script
 COLOR 0A
 
 :: =================================================================
-:: ==      🧙‍♂️ Project Gandalf Full Redeployment Script           ==
+:: ==      🧙‍♂️ Project Gandalf Full Redeployment Script (v2)      ==
 :: =================================================================
 ECHO.
 ECHO This script will commit all local changes and redeploy all components.
@@ -54,15 +54,27 @@ ECHO.
 
 
 :: =================================================================
-:: == Step 3: Redeploy the Dashboard to Cloudflare Pages          ==
+:: == Step 3: Build and Redeploy the Dashboard to Cloudflare Pages ==
 :: =================================================================
-ECHO [STEP 3/4] Redeploying Dashboard to Cloudflare Pages...
+ECHO [STEP 3/4] Building and Redeploying Dashboard...
 ECHO.
 
 CD dashboard
 
-:: This deploys the contents of the current folder.
-npx wrangler pages deploy . --project-name gandalf-dashboard
+ECHO [+] Creating a clean deployment folder...
+:: Remove the old 'dist' folder if it exists
+IF EXIST dist RMDIR /S /Q dist
+:: Create a new empty 'dist' folder
+MKDIR dist
+
+ECHO [+] Copying necessary files to deployment folder...
+:: Copy all HTML and JS files. The COPY command does NOT respect .gitignore
+COPY *.html dist\
+COPY *.js dist\
+
+ECHO [+] Deploying the built dashboard to Cloudflare Pages...
+:: Deploy ONLY the 'dist' folder
+npx wrangler pages deploy dist --project-name gandalf-dashboard
 
 CD ..
 ECHO.

@@ -11,4 +11,3 @@ node_modules/
 config/config.env
 dashboard/config.js
 .vs/
-env/

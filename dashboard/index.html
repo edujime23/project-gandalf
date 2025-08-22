@@ -46,10 +46,11 @@
         <div id="status">Loading...</div>
         <div id="items" class="item-grid"></div>
     </div>
+    <script src="config.js"></script>
 
     <script>
-        const SUPABASE_URL = 'https://noovgylllgdyxylnqbux.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vb3ZneWxsbGdkeXh5bG5xYnV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU4MTc4MTMsImV4cCI6MjA3MTM5MzgxM30.qFUArh7c0BvsueTjzpu_NLZESRAeqIho3k64iQV0fSc';
+        const SUPABASE_URL = CONFIG.SUPABASE_URL;
+        const SUPABASE_KEY = CONFIG.SUPABASE_KEY;
 
         async function loadData() {
             try {
@@ -89,18 +90,18 @@
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <h3>${item.item.replace(/_/g, ' ').toUpperCase()}</h3>
-                    <div class="price">
-                        Buy: ${item.buy_median || 'N/A'}p |
-                        Sell: ${item.sell_median || 'N/A'}p
-                    </div>
-                    <div class="spread">
-                        Spread: ${item.spread || 'N/A'}p
-                    </div>
-                    <div style="color: #666; font-size: 12px; margin-top: 10px;">
-                        ${new Date(item.timestamp).toLocaleString()}
-                    </div>
-                `;
+                        <h3>${item.item.replace(/_/g, ' ').toUpperCase()}</h3>
+                        <div class="price">
+                            Buy: ${item.buy_median || 'N/A'}p |
+                            Sell: ${item.sell_median || 'N/A'}p
+                        </div>
+                        <div class="spread">
+                            Spread: ${item.spread || 'N/A'}p
+                        </div>
+                        <div style="color: #666; font-size: 12px; margin-top: 10px;">
+                            ${new Date(item.timestamp).toLocaleString()}
+                        </div>
+                    `;
                 container.appendChild(card);
             });
 

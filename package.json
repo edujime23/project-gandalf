@@ -1,0 +1,13 @@
+{
+  "name": "project-gandalf",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy:worker": "cd workers && npm run deploy",
+    "deploy:dashboard": "cd dashboard && npm run deploy",
+    "deploy:all": "npm run deploy:worker && npm run deploy:dashboard"
+  },
+  "devDependencies": {
+    "wrangler": "^4.32.0"
+  }
+}

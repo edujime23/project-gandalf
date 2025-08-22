@@ -1,0 +1,391 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Gandalf Market Intelligence</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .header {
+            background: #1e293b;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .price-card {
+            border-left: 4px solid #3b82f6;
+        }
+
+        .pattern-card {
+            border-left: 4px solid #10b981;
+        }
+
+        .prediction-card {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .price {
+            font-size: 32px;
+            font-weight: bold;
+            color: #3b82f6;
+            margin: 10px 0;
+        }
+
+        .change {
+            font-size: 18px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .positive {
+            background: #10b981;
+            color: white;
+        }
+
+        .negative {
+            background: #ef4444;
+            color: white;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #cbd5e1;
+            margin-top: 30px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            margin: 0 0 10px 0;
+            color: #cbd5e1;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #10b981;
+            color: white;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-left: 20px;
+        }
+
+        .pattern-item {
+            padding: 15px;
+            background: #0f172a;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .correlation {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .arrow {
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>
+                🧙‍♂️ Gandalf Market Intelligence
+                <span class="status" id="status">Connecting...</span>
+            </h1>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Current Prices -->
+        <h2>📊 Current Market Prices</h2>
+        <div class="grid" id="prices-grid"></div>
+
+        <!-- Discovered Patterns -->
+        <h2>🔍 Discovered Patterns</h2>
+        <div class="grid" id="patterns-grid"></div>
+
+        <!-- Predictions -->
+        <h2>🔮 Price Predictions</h2>
+        <div class="grid" id="predictions-grid"></div>
+
+        <!-- Charts -->
+        <h2>📈 Market Trends</h2>
+        <div class="card">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </div>
+    <script src="config.js"></script>
+    <script>
+        const SUPABASE_URL = CONFIG.SUPABASE_URL;
+        const SUPABASE_KEY = CONFIG.SUPABASE_KEY;
+        const ANALYZER_URL = CONFIG.ANALYZER_URL;
+
+        let priceChart = null;
+
+        async function loadAllData() {
+            try {
+                // Load prices
+                await loadPrices();
+
+                // Load patterns
+                await loadPatterns();
+
+                // Load predictions
+                await loadPredictions();
+
+                // Update status
+                document.getElementById('status').textContent = 'Live';
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('status').textContent = 'Error';
+                document.getElementById('status').style.background = '#ef4444';
+            }
+        }
+
+        async function loadPrices() {
+            const response = await fetch(
+                `${SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=100`,
+                {
+                    headers: { 'apikey': SUPABASE_KEY }
+                }
+            );
+
+            const data = await response.json();
+
+            // Group by item
+            const latestPrices = {};
+            const priceHistory = {};
+
+            data.forEach(row => {
+                if (!latestPrices[row.item]) {
+                    latestPrices[row.item] = row;
+                }
+
+                if (!priceHistory[row.item]) {
+                    priceHistory[row.item] = [];
+                }
+                priceHistory[row.item].push({
+                    x: new Date(row.timestamp),
+                    y: row.sell_median
+                });
+            });
+
+            // Display prices
+            const grid = document.getElementById('prices-grid');
+            grid.innerHTML = '';
+
+            Object.entries(latestPrices).forEach(([item, data]) => {
+                const card = document.createElement('div');
+                card.className = 'card price-card';
+
+                // Calculate 24h change
+                const oldData = priceHistory[item]?.[priceHistory[item].length - 1];
+                let change = 0;
+                if (oldData && data.sell_median && oldData.y) {
+                    change = ((data.sell_median - oldData.y) / oldData.y * 100);
+                }
+
+                card.innerHTML = `
+                        <h3>${item.replace(/_/g, ' ').toUpperCase()}</h3>
+                        <div class="price">${data.sell_median || 'N/A'}p</div>
+                        <div>
+                            <span>Buy: ${data.buy_median || 'N/A'}p</span> |
+                            <span>Spread: ${data.spread || 'N/A'}p</span>
+                        </div>
+                        <div class="change ${change >= 0 ? 'positive' : 'negative'}">
+                            ${change >= 0 ? '↑' : '↓'} ${Math.abs(change).toFixed(2)}%
+                        </div>
+                    `;
+
+                grid.appendChild(card);
+            });
+
+            // Update chart
+            updatePriceChart(priceHistory);
+        }
+
+        async function loadPatterns() {
+            try {
+                const response = await fetch(`${ANALYZER_URL}/api/patterns`);
+                const patterns = await response.json();
+
+                const grid = document.getElementById('patterns-grid');
+                grid.innerHTML = '';
+
+                patterns.forEach(pattern => {
+                    const card = document.createElement('div');
+                    card.className = 'card pattern-card';
+
+                    if (pattern.type === 'correlation') {
+                        card.innerHTML = `
+                                <h3>Correlation Found</h3>
+                                <div class="correlation">
+                                    <span>${pattern.item1.replace(/_/g, ' ')}</span>
+                                    <span class="arrow">${pattern.direction === 'positive' ? '↔️' : '↔️'}</span>
+                                    <span>${pattern.item2.replace(/_/g, ' ')}</span>
+                                </div>
+                                <div>Strength: ${(pattern.strength * 100).toFixed(0)}%</div>
+                            `;
+                    } else if (pattern.type === 'surge' || pattern.type === 'crash') {
+                        card.innerHTML = `
+                                <h3>${pattern.type === 'surge' ? '📈 Price Surge' : '📉 Price Crash'}</h3>
+                                <div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div>
+                                <div class="change ${pattern.type === 'surge' ? 'positive' : 'negative'}">
+                                    ${pattern.change}% change
+                                </div>
+                                <div>From ${pattern.from}p to ${pattern.to}p</div>
+                            `;
+                    } else if (pattern.type === 'golden_cross') {
+                        card.innerHTML = `
+                                <h3>🎯 Golden Cross Signal</h3>
+                                <div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div>
+                                <div>MA5: ${pattern.ma5.toFixed(1)}p</div>
+                                <div>MA20: ${pattern.ma20.toFixed(1)}p</div>
+                                <div class="positive">Bullish Signal</div>
+                            `;
+                    }
+
+                    grid.appendChild(card);
+                });
+
+                if (patterns.length === 0) {
+                    grid.innerHTML = '<div class="card">No patterns detected yet. Check back later!</div>';
+                }
+
+            } catch (error) {
+                console.error('Error loading patterns:', error);
+            }
+        }
+
+        async function loadPredictions() {
+            try {
+                const response = await fetch(`${ANALYZER_URL}/api/predictions`);
+                const predictions = await response.json();
+
+                const grid = document.getElementById('predictions-grid');
+                grid.innerHTML = '';
+
+                predictions.forEach(pred => {
+                    const card = document.createElement('div');
+                    card.className = 'card prediction-card';
+
+                    card.innerHTML = `
+                            <h3>${pred.item.replace(/_/g, ' ').toUpperCase()}</h3>
+                            <div>Current: ${pred.current_price}p</div>
+                            <div>Predicted: ${pred.predicted_price}p</div>
+                            <div class="change ${pred.predicted_change >= 0 ? 'positive' : 'negative'}">
+                                ${pred.trend === 'up' ? '📈' : '📉'} ${pred.predicted_change}%
+                            </div>
+                            <div style="font-size: 12px; margin-top: 10px;">
+                                Confidence: ${(pred.confidence * 100).toFixed(0)}% |
+                                Based on ${pred.based_on_hours.toFixed(1)}h of data
+                            </div>
+                        `;
+
+                    grid.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error('Error loading predictions:', error);
+            }
+        }
+
+        function updatePriceChart(priceHistory) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+
+            // Prepare datasets
+            const datasets = Object.entries(priceHistory).slice(0, 5).map(([item, data], index) => ({
+                label: item.replace(/_/g, ' '),
+                data: data.filter(d => d.y), // Remove null prices
+                borderColor: [
+                    '#3b82f6',
+                    '#10b981',
+                    '#f59e0b',
+                    '#ef4444',
+                    '#8b5cf6'
+                ][index],
+                backgroundColor: 'transparent',
+                tension: 0.1
+            }));
+
+            if (priceChart) {
+                priceChart.destroy();
+            }
+
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            ticks: { color: '#cbd5e1' },
+                            grid: { color: '#334155' }
+                        },
+                        y: {
+                            ticks: { color: '#cbd5e1' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load immediately and refresh
+        loadAllData();
+        setInterval(loadAllData, 60000); // Every minute
+
+        // Refresh patterns less frequently
+        setInterval(loadPatterns, 300000); // Every 5 minutes
+    </script>
+</body>
+</html>

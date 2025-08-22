@@ -1,0 +1,15 @@
+name = "gandalf-analyzer"
+main = "src/analyzer.js"
+compatibility_date = "2024-01-01"
+account_id = "19d25279bc9bed348875d2f840c48588"  # THIS IS THE CORRECT ONE
+
+[triggers]
+crons = ["0 * * * *"]  # Every hour
+
+[[kv_namespaces]]
+binding = "PATTERN_CACHE"
+id = "a20a59448ed343be8b13f98a2b1b0031"  # This is the KV namespace ID (correct)
+
+[vars]
+SUPABASE_URL = "https://noovgylllgdyxylnqbux.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vb3ZneWxsbGdkeXh5bG5xYnV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU4MTc4MTMsImV4cCI6MjA3MTM5MzgxM30.qFUArh7c0BvsueTjzpu_NLZESRAeqIho3k64iQV0fSc"

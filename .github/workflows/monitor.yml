@@ -1,0 +1,20 @@
+name: Monitor System Health
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Every 30 minutes
+  workflow_dispatch:
+
+jobs:
+  check-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Worker Health
+        run: |
+          response=$(curl -s https://gandalf-collector.${{ secrets.WORKER_SUBDOMAIN }}.workers.dev/health)
+          echo "Health response: $response"
+          
+      - name: Check Data Freshness
+        run: |
+          echo "Checking data freshness..."
+          # Add more checks here later

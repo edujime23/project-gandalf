@@ -5,4 +5,10 @@ __pycache__/
 .env
 logs/
 *.log
-
+ 
+node_modules/
+.wrangler/
+config/config.env
+dashboard/config.js
+.vs/
+env/

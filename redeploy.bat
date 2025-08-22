@@ -1,6 +1,6 @@
 ﻿
 git add .
-git commit -m "feat: Implement secure API gateway for dashboard"
+git commit -m "new commit"
 git push origin main
 
 CD workers

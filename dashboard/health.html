@@ -102,47 +102,40 @@
             <div class="health-card"><h3>Active Signals (Cache)</h3><div class="metric" id="active-signals">-</div></div>
             <div class="health-card"><h3>Last Collection</h3><div class="metric" id="last-collection">-</div></div>
         </div>
-        <h2>Recent Logs (Simulated)</h2>
-        <div class="logs" id="logs"><div>Loading logs...</div></div>
     </div>
     <script>
         const API_BASE_URL = '/api';
 
-        async function checkHealth(service, url) {
-            const card = document.getElementById(`${service}-status`);
+        async function checkWorkerHealth(serviceName, externalUrl) {
+            const card = document.getElementById(`${serviceName}-status`);
             try {
-                const response = await fetch(url);
+                const response = await fetch(externalUrl);
+                if (!response.ok) throw new Error(`Status ${response.status}`);
                 const data = await response.json();
-                if (response.ok && (data.status === 'healthy' || data.healthy)) {
-                    card.className = 'health-card healthy';
-                    card.querySelector('.status-icon').textContent = '✅';
-                    card.querySelector('.metric').textContent = 'Operational';
-                    if (service === 'gandalf-collector' && data.last_collection_age_minutes != null) {
-                        document.getElementById('last-collection').textContent = `${data.last_collection_age_minutes} min ago`;
-                    }
-                } else {
-                    card.className = 'health-card warning';
-                    card.querySelector('.status-icon').textContent = '⚠️';
-                    card.querySelector('.metric').textContent = data.issue || 'Issues Detected';
+
+                card.className = 'health-card healthy';
+                card.querySelector('.status-icon').textContent = '✅';
+                card.querySelector('.metric').textContent = 'Operational';
+
+                if (serviceName === 'collector' && data.last_collection_age_minutes != null) {
+                    document.getElementById('last-collection').textContent = `${data.last_collection_age_minutes} min ago`;
                 }
             } catch (error) {
                 card.className = 'health-card error';
                 card.querySelector('.status-icon').textContent = '❌';
                 card.querySelector('.metric').textContent = 'Offline';
+                console.error(`Health check failed for ${serviceName}:`, error);
             }
         }
 
         async function checkDatabaseHealth() {
             const card = document.getElementById('database-status');
             try {
-                const response = await fetch(`${API_BASE_URL}/market_data?select=timestamp&order=timestamp.desc&limit=1`);
-                if (response.ok) {
-                    card.className = 'health-card healthy';
-                    card.querySelector('.status-icon').textContent = '✅';
-                    card.querySelector('.metric').textContent = 'Connected';
-                } else {
-                    throw new Error('Database error');
-                }
+                const response = await fetch(`${API_BASE_URL}/market_data?select=timestamp&limit=1`);
+                if (!response.ok) throw new Error('Database response not OK');
+                card.className = 'health-card healthy';
+                card.querySelector('.status-icon').textContent = '✅';
+                card.querySelector('.metric').textContent = 'Connected';
             } catch (error) {
                 card.className = 'health-card error';
                 card.querySelector('.status-icon').textContent = '❌';
@@ -152,13 +145,14 @@
 
         async function loadMetrics() {
             try {
-                const dpResponse = await fetch(`${API_BASE_URL}/market_data?select=count`, { headers: { 'Range-Unit': 'items', 'Range': '0-1' } });
-                const dpCount = dpResponse.headers.get('content-range').split('/')[1];
-                document.getElementById('data-points').textContent = dpCount || '-';
+                // To get the total count, we make a HEAD request and read the Content-Range header
+                const dpResponse = await fetch(`${API_BASE_URL}/market_data?select=count`, { method: 'HEAD' });
+                const dpRange = dpResponse.headers.get('content-range');
+                document.getElementById('data-points').textContent = dpRange ? dpRange.split('/')[1] : 'N/A';
 
-                const pResponse = await fetch(`${API_BASE_URL}/discovered_patterns?select=count`, { headers: { 'Range-Unit': 'items', 'Range': '0-1' } });
-                const pCount = pResponse.headers.get('content-range').split('/')[1];
-                document.getElementById('patterns-found').textContent = pCount || '-';
+                const pResponse = await fetch(`${API_BASE_URL}/discovered_patterns?select=count`, { method: 'HEAD' });
+                const pRange = pResponse.headers.get('content-range');
+                document.getElementById('patterns-found').textContent = pRange ? pRange.split('/')[1] : '0';
 
                 const sigResponse = await fetch(`${API_BASE_URL}/signals`);
                 const signals = await sigResponse.json();
@@ -168,31 +162,17 @@
             }
         }
 
-        function loadLogs() {
-            const logsDiv = document.getElementById('logs');
-            const now = new Date();
-            const logs = [
-                `[${new Date(now.getTime() - 10000).toLocaleTimeString()}] System health check completed`,
-                `[${new Date(now.getTime() - 4 * 60000).toLocaleTimeString()}] Data collection cycle finished`,
-                `[${new Date(now.getTime() - 15 * 60000).toLocaleTimeString()}] Pattern analysis completed, 2 alerts sent.`,
-                `[${new Date(now.getTime() - 31 * 60000).toLocaleTimeString()}] System monitor check passed.`
-            ];
-            logsDiv.innerHTML = logs.map(log => `<div>${log}</div>`).join('');
-        }
-
         async function checkAllHealth() {
             await Promise.all([
-                checkHealth('gandalf-collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
-                checkHealth('gandalf-analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
-                checkHealth('gandalf-monitor', 'https://gandalf-monitor.psnedujime.workers.dev'),
+                checkWorkerHealth('collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
+                checkWorkerHealth('analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
+                checkWorkerHealth('monitor', 'https://gandalf-monitor.psnedujime.workers.dev'),
                 checkDatabaseHealth(),
-                loadMetrics(),
-                loadLogs()
+                loadMetrics()
             ]);
         }
-
         checkAllHealth();
-        setInterval(checkAllHealth, 30000);
+        setInterval(checkAllHealth, 60000); // Check every minute
     </script>
 </body>
 </html>

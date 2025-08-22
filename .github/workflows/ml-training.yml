@@ -1,3 +1,4 @@
+# FINAL & FIXED ml-training.yml
 name: ML Model Training
 
 on:
@@ -11,35 +12,36 @@ jobs:
     timeout-minutes: 30
     
     steps:
-    - uses: actions/checkout@v3
+    - name: 1. Checkout Repository
+      uses: actions/checkout@v4
     
-    - name: Setup Python
-      uses: actions/setup-python@v4
+    - name: 2. Setup Python
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
     
-    - name: Install dependencies
+    - name: 3. Install Dependencies
       run: |
         pip install pandas numpy scikit-learn requests joblib
     
-    - name: Train ML models
+    - name: 4. Train ML models
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: |
         python scripts/train_models.py
     
-    - name: Upload model artifacts
-      uses: actions/upload-artifact@v3
+    - name: 5. Upload model artifacts
+      uses: actions/upload-artifact@v4 # FIXED
       with:
-        name: ml-models
+        name: ml-models-${{ github.run_id }}
         path: models/
         retention-days: 30
     
-    - name: Commit models (optional)
+    - name: 6. Commit models (Optional)
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add models/*.pkl models/*.json
         git diff --quiet && git diff --staged --quiet || git commit -m "Update ML models [skip ci]"
-        git push || echo "No changes to push"
+        git push || echo "No changes to commit"

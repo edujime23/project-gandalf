@@ -1,14 +1,14 @@
-name = "gandalf-analyzer"
-main = "src/analyzer.js"
+name = "gandalf-monitor"
+main = "src/monitor.js"
 compatibility_date = "2024-01-01"
-account_id = "19d25279bc9bed348875d2f840c48588"  # THIS IS THE CORRECT ONE
+account_id = "19d25279bc9bed348875d2f840c48588"
 
 [triggers]
-crons = ["*/15 * * * *"]  # Every 15 minutes for testing
+crons = ["*/30 * * * *"]  # Every 30 minutes
 
 [[kv_namespaces]]
-binding = "PATTERN_CACHE"
-id = "a20a59448ed343be8b13f98a2b1b0031"  # This is the KV namespace ID (correct)
+binding = "MARKET_CACHE"
+id = "fdb7c06916734e528b4d37a963a52a04"  # Same as collector
 
 [vars]
 SUPABASE_URL = "https://noovgylllgdyxylnqbux.supabase.co"

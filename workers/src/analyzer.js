@@ -1,18 +1,11 @@
-// This runs every hour to find patterns
+﻿// Complete analyzer.js with Discord alerts and trading signals
 export default {
     async scheduled(event, env, ctx) {
         console.log('Running pattern analysis...');
-
         try {
-            // Fetch recent data from Supabase
             const data = await fetchRecentData(env);
-
-            // Find correlations
             const patterns = await findPatterns(data);
-
-            // Store discoveries
             await storePatterns(env, patterns);
-
             console.log(`Found ${patterns.length} patterns`);
         } catch (error) {
             console.error('Analysis error:', error);
@@ -35,6 +28,17 @@ export default {
         if (url.pathname === '/api/predictions') {
             const predictions = await generatePredictions(env);
             return new Response(JSON.stringify(predictions), {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
+
+        // NEW: Signals endpoint
+        if (url.pathname === '/api/signals') {
+            const signals = await env.PATTERN_CACHE.get('latest_signals');
+            return new Response(signals || '[]', {
                 headers: {
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
@@ -190,6 +194,122 @@ function calculateCorrelation(data1, data2) {
     return den === 0 ? 0 : num / den;
 }
 
+// NEW: Discord notification function
+async function sendDiscordAlert(env, alert) {
+    if (!env.DISCORD_WEBHOOK) return; // Skip if no webhook configured
+
+    const embed = {
+        title: alert.title || "🧙‍♂️ Gandalf Alert",
+        description: alert.description,
+        color: alert.color || 3447003, // Blue default
+        fields: alert.fields || [],
+        timestamp: new Date().toISOString(),
+        footer: {
+            text: "Gandalf Market Intelligence"
+        }
+    };
+
+    try {
+        await fetch(env.DISCORD_WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ embeds: [embed] })
+        });
+    } catch (error) {
+        console.error('Discord webhook error:', error);
+    }
+}
+
+// NEW: Trading signal generator
+async function generateTradingSignals(patterns, data) {
+    const signals = [];
+
+    // Process each pattern for trading opportunities
+    for (const pattern of patterns) {
+        let signal = null;
+
+        if (pattern.type === 'surge' && pattern.change > 15) {
+            signal = {
+                type: 'SELL',
+                item: pattern.item,
+                reason: `Price surged ${pattern.change}% - potential peak`,
+                confidence: Math.min(pattern.confidence * 1.2, 0.95),
+                current_price: pattern.to,
+                action: `Consider selling ${pattern.item} at ${pattern.to}p`
+            };
+        } else if (pattern.type === 'crash' && pattern.change < -15) {
+            signal = {
+                type: 'BUY',
+                item: pattern.item,
+                reason: `Price crashed ${Math.abs(pattern.change)}% - potential bottom`,
+                confidence: Math.min(pattern.confidence * 1.2, 0.95),
+                current_price: pattern.to,
+                action: `Consider buying ${pattern.item} at ${pattern.to}p`
+            };
+        } else if (pattern.type === 'golden_cross') {
+            signal = {
+                type: 'BUY',
+                item: pattern.item,
+                reason: 'Golden cross detected - bullish signal',
+                confidence: 0.75,
+                current_price: pattern.currentPrice,
+                action: `Uptrend starting for ${pattern.item}`
+            };
+        }
+
+        if (signal && signal.confidence > 0.7) {
+            signals.push(signal);
+        }
+    }
+
+    // Look for arbitrage opportunities
+    const arbitrage = findArbitrageOpportunities(data);
+    signals.push(...arbitrage);
+
+    return signals;
+}
+
+// NEW: Arbitrage finder
+function findArbitrageOpportunities(data) {
+    const opportunities = [];
+    const itemGroups = {};
+
+    // Group by item
+    data.forEach(row => {
+        if (!itemGroups[row.item]) {
+            itemGroups[row.item] = [];
+        }
+        itemGroups[row.item].push(row);
+    });
+
+    // Check each item for arbitrage
+    Object.entries(itemGroups).forEach(([item, rows]) => {
+        const latestRow = rows[rows.length - 1];
+
+        if (latestRow.buy_median && latestRow.sell_median) {
+            const spread = latestRow.sell_median - latestRow.buy_median;
+            const spreadPct = (spread / latestRow.sell_median) * 100;
+
+            // High spread = opportunity
+            if (spreadPct > 20 && spread > 5) {
+                opportunities.push({
+                    type: 'ARBITRAGE',
+                    item: item,
+                    buy_price: latestRow.sell_median,
+                    sell_price: latestRow.buy_median,
+                    profit: spread,
+                    profit_pct: spreadPct,
+                    confidence: 0.9,
+                    action: `Arbitrage: Buy at ${latestRow.sell_median}p, sell at ${latestRow.buy_median}p for ${spread}p profit`
+                });
+            }
+        }
+    });
+
+    return opportunities;
+}
+
+// UPDATED: storePatterns with Discord alerts and signals
 async function storePatterns(env, patterns) {
     // Store in KV
     await env.PATTERN_CACHE.put(
@@ -197,6 +317,52 @@ async function storePatterns(env, patterns) {
         JSON.stringify(patterns),
         { expirationTtl: 3600 } // 1 hour
     );
+
+    // Generate trading signals
+    const data = await fetchRecentData(env);
+    const signals = await generateTradingSignals(patterns, data);
+
+    // Store signals
+    await env.PATTERN_CACHE.put(
+        'latest_signals',
+        JSON.stringify(signals),
+        { expirationTtl: 3600 }
+    );
+
+    // Send Discord alerts for HIGH confidence signals
+    for (const signal of signals) {
+        if (signal.confidence > 0.8) {
+            const alertColor = signal.type === 'BUY' ? 3066993 : // Green
+                signal.type === 'SELL' ? 15158332 : // Red
+                    3447003; // Blue for arbitrage
+
+            await sendDiscordAlert(env, {
+                title: `💎 ${signal.type} Signal: ${signal.item.replace(/_/g, ' ').toUpperCase()}`,
+                description: signal.action,
+                color: alertColor,
+                fields: [
+                    {
+                        name: "Confidence",
+                        value: `${(signal.confidence * 100).toFixed(0)}%`,
+                        inline: true
+                    },
+                    {
+                        name: "Reason",
+                        value: signal.reason || "Pattern detected",
+                        inline: false
+                    },
+                    ...(signal.profit ? [{
+                        name: "Potential Profit",
+                        value: `${signal.profit}p (${signal.profit_pct.toFixed(1)}%)`,
+                        inline: true
+                    }] : [])
+                ]
+            });
+
+            // Rate limit Discord messages
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+    }
 
     // Store significant patterns in Supabase
     const significant = patterns.filter(p =>

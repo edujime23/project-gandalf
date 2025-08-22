@@ -35,7 +35,13 @@ async function collectMarketData(env) {
         'wisp_prime_set',
         'volt_prime_set',
         'saryn_prime_set',
-        'mesa_prime_set'
+        'mesa_prime_set',
+        // Add more here:
+        'nekros_prime_set',
+        'nova_prime_set',
+        'rhino_prime_set',
+        'frost_prime_set',
+        'ember_prime_set'
     ];
 
     const results = [];

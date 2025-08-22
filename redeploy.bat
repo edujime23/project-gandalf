@@ -3,7 +3,8 @@ TITLE Gandalf Full Redeployment Script
 COLOR 0A
 
 :: =================================================================
-:: ==      🧙‍♂️ Project Gandalf Full Redeployment Script (v2)      ==
+:: ==      🧙‍♂️ Project Gandalf Full Redeployment Script (v3)      ==
+:: ==           (Fixes Cloudflare Pages deployment)               ==
 :: =================================================================
 ECHO.
 ECHO This script will commit all local changes and redeploy all components.
@@ -19,7 +20,7 @@ ECHO [STEP 1/4] Committing and pushing all local changes to GitHub...
 ECHO.
 
 git add .
-git commit -m "Automated redeployment script commit"
+git commit -m "Automated redeployment with final build fix"
 git push origin main
 
 ECHO.
@@ -62,19 +63,16 @@ ECHO.
 CD dashboard
 
 ECHO [+] Creating a clean deployment folder...
-:: Remove the old 'dist' folder if it exists
 IF EXIST dist RMDIR /S /Q dist
-:: Create a new empty 'dist' folder
 MKDIR dist
 
 ECHO [+] Copying necessary files to deployment folder...
-:: Copy all HTML and JS files. The COPY command does NOT respect .gitignore
 COPY *.html dist\
 COPY *.js dist\
 
 ECHO [+] Deploying the built dashboard to Cloudflare Pages...
-:: Deploy ONLY the 'dist' folder
-npx wrangler pages deploy dist --project-name gandalf-dashboard
+:: CRITICAL FIX: Explicitly deploy the 'dist' folder
+npx wrangler pages deploy dist --project-name=gandalf-dashboard
 
 CD ..
 ECHO.

@@ -1,10 +1,4 @@
 ﻿
-TITLE Gandalf Full Redeployment Script
-COLOR 0A
-
-PAUSE
-CLS
-
 git add .
 git commit -m "feat: Implement secure API gateway for dashboard"
 git push origin main
@@ -18,5 +12,3 @@ CD ..
 CD dashboard
 npx wrangler pages deploy . --project-name=gandalf-dashboard
 CD ..
-
-PAUSE

@@ -1,34 +1,45 @@
+# FINAL & FIXED deep-analysis.yml
 name: Deep Market Analysis
 
 on:
   schedule:
     - cron: '0 */6 * * *'  # Every 6 hours
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual running
 
 jobs:
-  analyze-market:
+  analyze-and-store: # A more descriptive job name
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     steps:
-    - uses: actions/checkout@v3
+    - name: 1. Checkout Repository
+      uses: actions/checkout@v4 # Use latest version
     
-    - name: Setup Python
-      uses: actions/setup-python@v4
+    - name: 2. Setup Python
+      uses: actions/setup-python@v5 # Use latest version
       with:
         python-version: '3.10'
     
-    - name: Install dependencies
+    - name: 3. Install Python Dependencies
       run: |
-        pip install pandas numpy scipy scikit-learn requests
+        pip install pandas numpy scipy requests
     
-    - name: Run deep analysis
+    - name: 4. Run Deep Analysis Script
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: |
         python scripts/deep_analysis.py
     
-    - name: Store results
+    - name: 5. Store Results back to Supabase
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: |
-        # Upload discoveries back to Supabase
         python scripts/store_results.py
+        
+    - name: 6. Upload Results as Artifact (Optional)
+      uses: actions/upload-artifact@v4 # Use latest version
+      with:
+        name: analysis-results-${{ github.run_id }}
+        path: output/

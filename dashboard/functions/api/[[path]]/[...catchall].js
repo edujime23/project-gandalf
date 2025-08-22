@@ -32,6 +32,7 @@ export async function onRequest(context) {
         if (context.request.method === 'POST') {
             requestOptions.method = 'POST';
             requestOptions.headers['Content-Type'] = 'application/json';
+            requestOptions.headers['Prefer'] = 'return=minimal';
             requestOptions.body = await context.request.text();
         }
     }
@@ -40,11 +41,11 @@ export async function onRequest(context) {
         // Fetch the data from the target
         const response = await fetch(targetUrl, requestOptions);
 
-        // Create a new response with CORS headers to avoid being blocked
+        // Create a new response with CORS headers to avoid being blocked by browsers
         const newHeaders = new Headers(response.headers);
         newHeaders.set('Access-Control-Allow-Origin', '*');
         newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        newHeaders.set('Access-Control-Allow-Headers', 'Content-Type');
+        newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization');
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -55,7 +56,6 @@ export async function onRequest(context) {
             });
         }
 
-        // Return the response directly to the dashboard
         return new Response(response.body, {
             status: response.status,
             headers: newHeaders

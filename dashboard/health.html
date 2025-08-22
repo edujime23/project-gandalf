@@ -164,11 +164,12 @@
 
         async function checkAllHealth() {
             await Promise.all([
-                checkWorkerHealth('collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
-                checkWorkerHealth('analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
-                checkWorkerHealth('monitor', 'https://gandalf-monitor.psnedujime.workers.dev'),
+                checkHealth('collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
+                checkHealth('analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
+                checkHealth('monitor', 'https://gandalf-monitor.psnedujime.workers.dev'),
                 checkDatabaseHealth(),
-                loadMetrics()
+                loadMetrics(),
+                loadLogs()
             ]);
         }
         checkAllHealth();

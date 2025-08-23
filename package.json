@@ -8,6 +8,6 @@
     "deploy:all": "npm run deploy:worker && npm run deploy:dashboard"
   },
   "devDependencies": {
-    "wrangler": "^4.32.0"
+    "wrangler": "^3.0.0"
   }
 }

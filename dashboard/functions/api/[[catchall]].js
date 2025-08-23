@@ -29,7 +29,7 @@ export async function onRequest(context) {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
-            const targetUrl = `${ANALYZER_URL}/api/run-now`;
+            const targetUrl = `${ANALYZER_URL}/api/run-now${url.search}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
         }

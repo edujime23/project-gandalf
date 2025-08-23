@@ -135,6 +135,9 @@
         <h2>🤖 ML Predictions (trained models)</h2>
         <div class="grid" id="ml-predictions-grid"></div>
 
+        <h2>🧾 Currently Tracked Items</h2>
+        <div class="grid" id="tracked-items-grid"></div>
+
         <h2>📈 Market Trends (Top 5 Items)</h2>
         <div class="card"><canvas id="priceChart"></canvas></div>
     </div>
@@ -149,7 +152,8 @@
                     loadPrices(),
                     loadPatterns(),
                     loadPredictions(),
-                    loadMlPredictions()
+                    loadMlPredictions(),
+                    loadTrackedItems()
                 ]);
                 const statusEl = document.getElementById('status');
                 statusEl.textContent = 'Live';
@@ -256,7 +260,6 @@
                 if (!resp.ok) throw new Error('Failed to load ML predictions');
                 const rows = await resp.json();
 
-                // Latest per item
                 const latestByItem = new Map();
                 for (const r of rows) {
                     const prev = latestByItem.get(r.item);
@@ -266,7 +269,6 @@
                 }
                 const preds = Array.from(latestByItem.values());
 
-                // Compute change client-side
                 preds.forEach(p => {
                     if (p.current_price != null && p.current_price !== 0 && p.predicted_price != null) {
                         p.predicted_change = ((p.predicted_price - p.current_price) / p.current_price) * 100;
@@ -309,6 +311,28 @@
                 console.error('ML predictions load error:', err);
                 const grid = document.getElementById('ml-predictions-grid');
                 grid.innerHTML = '<div class="card">Failed to load ML predictions.</div>';
+            }
+        }
+
+        async function loadTrackedItems() {
+            try {
+                const resp = await fetch(`${API_BASE_URL}/tracked_items?select=item,score&active=eq.true&order=score.desc&limit=50`);
+                const rows = await resp.json();
+                const grid = document.getElementById('tracked-items-grid');
+                if (!rows.length) {
+                    grid.innerHTML = '<div class="card">No tracked items yet.</div>';
+                    return;
+                }
+                grid.innerHTML = rows.map(r => `
+              <div class="card">
+                <h3>${r.item.replace(/_/g, ' ').toUpperCase()}</h3>
+                <div style="font-size:12px;color:#94a3b8">Score: ${(r.score ?? 0).toFixed(3)}</div>
+              </div>
+            `).join('');
+            } catch (e) {
+                console.error('Tracked items load error:', e);
+                const grid = document.getElementById('tracked-items-grid');
+                grid.innerHTML = '<div class="card">Failed to load tracked items.</div>';
             }
         }
 

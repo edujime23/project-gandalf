@@ -1,4 +1,4 @@
-﻿// analyzer.js - v1.5 - /api/run-now + debug, service-role writes + logging
+﻿// analyzer.js - v1.6 - run-now + debug, assert env, service-role writes + logging
 
 export default {
     async scheduled(event, env, ctx) {
@@ -12,14 +12,15 @@ export default {
 
         // Health
         if (url.pathname === '/' || url.pathname === '/api/health') {
-            const signals = await env.PATTERN_CACHE.get('latest_signals');
+            const signals = env.PATTERN_CACHE ? await env.PATTERN_CACHE.get('latest_signals') : null;
             return new Response(JSON.stringify({ status: 'healthy', cached: !!signals }), { headers });
         }
 
-        // Manual trigger (optionally loosen thresholds with ?force=1)
+        // Manual trigger (?force=1 to loosen thresholds for test)
         if (url.pathname === '/api/run-now') {
             const force = url.searchParams.get('force') === '1';
             try {
+                assertEnv(env); // ensure required env present
                 const result = await runAnalysis(env, { force });
                 return new Response(JSON.stringify({ ok: true, ...result }), { headers });
             } catch (e) {
@@ -28,27 +29,28 @@ export default {
             }
         }
 
-        // Debug: confirm env variable presence (no secrets returned)
+        // Debug: confirm env presence (no secrets)
         if (url.pathname === '/api/debug-config') {
             const cfg = {
                 has_service_role: !!env.SUPABASE_SERVICE_ROLE,
                 has_anon: !!env.SUPABASE_ANON_KEY,
-                supabase_url_set: !!env.SUPABASE_URL
+                supabase_url_set: !!env.SUPABASE_URL,
+                has_kv: !!env.PATTERN_CACHE
             };
             return new Response(JSON.stringify(cfg), { headers });
         }
 
-        // KV-backed API
+        // KV-backed APIs
         if (url.pathname === '/api/patterns') {
-            const patterns = await env.PATTERN_CACHE.get('latest_patterns');
+            const patterns = env.PATTERN_CACHE ? await env.PATTERN_CACHE.get('latest_patterns') : null;
             return new Response(patterns || '[]', { headers });
         }
         if (url.pathname === '/api/predictions') {
-            const preds = await env.PATTERN_CACHE.get('latest_predictions');
+            const preds = env.PATTERN_CACHE ? await env.PATTERN_CACHE.get('latest_predictions') : null;
             return new Response(preds || '[]', { headers });
         }
         if (url.pathname === '/api/signals') {
-            const sigs = await env.PATTERN_CACHE.get('latest_signals');
+            const sigs = env.PATTERN_CACHE ? await env.PATTERN_CACHE.get('latest_signals') : null;
             return new Response(sigs || '[]', { headers });
         }
 
@@ -70,12 +72,21 @@ async function runAnalysis(env, { force = false } = {}) {
     return { patterns: patterns.length, predictions: predictions.length };
 }
 
+// ---------------- Env checks -----------------
+function assertEnv(env) {
+    const missing = [];
+    if (!env.SUPABASE_URL) missing.push('SUPABASE_URL');
+    if (!env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
+    if (!env.PATTERN_CACHE) missing.push('PATTERN_CACHE (KV binding)');
+    if (missing.length) throw new Error(`Missing env: ${missing.join(', ')}`);
+}
+
 // ---------------- Data fetch -----------------
 async function fetchRecentData(env) {
-    const resp = await fetch(
-        `${env.SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=2500`,
-        { headers: { 'apikey': env.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}` } }
-    );
+    const url = `${env.SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=2500`;
+    const resp = await fetch(url, {
+        headers: { 'apikey': env.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}` }
+    });
     if (!resp.ok) {
         const txt = await resp.text().catch(() => '');
         console.error('fetchRecentData failed:', resp.status, txt);
@@ -104,10 +115,12 @@ async function postJSON(url, key, payload, label) {
 async function storeAnalysisResults(env, patterns, predictions, data, { force = false } = {}) {
     const signals = generateTradingSignals(patterns, data, { force });
 
-    // Cache to KV
-    await env.PATTERN_CACHE.put('latest_patterns', JSON.stringify(patterns), { expirationTtl: 3600 });
-    await env.PATTERN_CACHE.put('latest_predictions', JSON.stringify(predictions), { expirationTtl: 3600 });
-    await env.PATTERN_CACHE.put('latest_signals', JSON.stringify(signals), { expirationTtl: 3600 });
+    // Cache to KV if bound
+    if (env.PATTERN_CACHE) {
+        await env.PATTERN_CACHE.put('latest_patterns', JSON.stringify(patterns), { expirationTtl: 3600 });
+        await env.PATTERN_CACHE.put('latest_predictions', JSON.stringify(predictions), { expirationTtl: 3600 });
+        await env.PATTERN_CACHE.put('latest_signals', JSON.stringify(signals), { expirationTtl: 3600 });
+    }
 
     // Discord alerts
     for (const s of signals) {
@@ -127,11 +140,11 @@ async function storeAnalysisResults(env, patterns, predictions, data, { force = 
     }
 
     // Use service role if present for DB writes
-    const key = env.SUPABASE_SERVICE_ROLE || env.SUPABASE_ANON_KEY;
+    const key = env.SUPABASE_SERVICE_ROLE || env.SUPABASE_ANON_KEY || '';
     if (!key) console.warn('No Supabase key available in analyzer env');
 
     // 1) Patterns
-    if (patterns.length) {
+    if (patterns.length && env.SUPABASE_URL) {
         const payload = patterns.map(p => ({
             pattern_type: p.type,
             pattern_data: p,
@@ -141,7 +154,7 @@ async function storeAnalysisResults(env, patterns, predictions, data, { force = 
     }
 
     // 2) Predictions
-    if (predictions.length) {
+    if (predictions.length && env.SUPABASE_URL) {
         const payload = predictions.map(p => ({
             item: p.item,
             predicted_at: new Date().toISOString(),
@@ -153,7 +166,7 @@ async function storeAnalysisResults(env, patterns, predictions, data, { force = 
     }
 
     // 3) Signals
-    if (signals.length) {
+    if (signals.length && env.SUPABASE_URL) {
         const payload = signals.map(s => ({
             source: 'analyzer',
             item: s.item,
@@ -273,7 +286,6 @@ function generatePredictions(data) {
     return preds.slice(0, 10);
 }
 
-// Add option to loosen thresholds for test runs (force=true)
 function generateTradingSignals(patterns, data, { force = false } = {}) {
     const signals = [];
     const gate = force ? 0.1 : 0.7;

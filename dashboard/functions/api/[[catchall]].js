@@ -14,21 +14,20 @@ export async function onRequest(context) {
         'Access-Control-Allow-Headers': 'Content-Type, apikey, Authorization, x-admin-token'
     };
 
-    // CORS preflight
     if (request.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
-        // Protected: run analyzer now
+        // Protected: run analyzer now (uses ADMIN_TOKEN)
         if (apiPath === 'admin/analyzer/run') {
             const token = request.headers.get('x-admin-token') || url.searchParams.get('token');
             if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
                 return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-                    status: 401,
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
+            // Forward query string to analyzer (so you can use ?force=1)
             const targetUrl = `${ANALYZER_URL}/api/run-now${url.search}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
@@ -48,7 +47,7 @@ export async function onRequest(context) {
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
         }
 
-        // 2) Signals from DB (persisted)
+        // 2) Signals from DB
         if (apiPath.startsWith('signals-db')) {
             const targetUrl = `${SUPABASE_URL}/rest/v1/signals?order=created_at.desc&limit=100${url.search}`;
             const resp = await fetch(targetUrl, {
@@ -62,7 +61,7 @@ export async function onRequest(context) {
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
         }
 
-        // 3) Analyzer-backed endpoints (KV cache)
+        // 3) Analyzer-backed endpoints
         if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
             const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
@@ -78,10 +77,9 @@ export async function onRequest(context) {
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${SUPABASE_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return-minimal'
+                'Prefer': 'return=minimal'
             }
         };
-
         if (request.method === 'POST' || request.method === 'PATCH') {
             requestOptions.body = await request.text();
         }
@@ -103,8 +101,7 @@ export async function onRequest(context) {
     } catch (error) {
         console.error('Gateway fetch error:', error);
         return new Response(JSON.stringify({ error: 'Gateway internal error' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
 }

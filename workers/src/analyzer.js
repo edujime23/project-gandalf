@@ -1,61 +1,90 @@
-﻿// analyzer.js - v1.4 - Persist signals/patterns/predictions with service role + error logging
+﻿// analyzer.js - v1.5 - /api/run-now + debug, service-role writes + logging
 
 export default {
     async scheduled(event, env, ctx) {
-        console.log('Analyzer: running full cycle...');
-        try {
-            const data = await fetchRecentData(env);
-            if (!data || data.length < 50) {
-                console.log('Analyzer: not enough data; skipping.');
-                return;
-            }
-            const patterns = findPatterns(data);
-            const predictions = generatePredictions(data);
-            await storeAnalysisResults(env, patterns, predictions, data);
-            console.log(`Analyzer: patterns=${patterns.length}, predictions=${predictions.length}`);
-        } catch (err) {
-            console.error('Analyzer scheduled error:', err);
-        }
+        console.log('Analyzer: running scheduled cycle...');
+        ctx.waitUntil(runAnalysis(env, { force: false }));
     },
 
     async fetch(request, env) {
         const url = new URL(request.url);
         const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
+        // Health
         if (url.pathname === '/' || url.pathname === '/api/health') {
             const signals = await env.PATTERN_CACHE.get('latest_signals');
             return new Response(JSON.stringify({ status: 'healthy', cached: !!signals }), { headers });
         }
 
-        if (url.pathname.startsWith('/api/')) {
-            if (url.pathname === '/api/patterns') {
-                const patterns = await env.PATTERN_CACHE.get('latest_patterns');
-                return new Response(patterns || '[]', { headers });
+        // Manual trigger (optionally loosen thresholds with ?force=1)
+        if (url.pathname === '/api/run-now') {
+            const force = url.searchParams.get('force') === '1';
+            try {
+                const result = await runAnalysis(env, { force });
+                return new Response(JSON.stringify({ ok: true, ...result }), { headers });
+            } catch (e) {
+                console.error('run-now error:', e);
+                return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers });
             }
-            if (url.pathname === '/api/predictions') {
-                const preds = await env.PATTERN_CACHE.get('latest_predictions');
-                return new Response(preds || '[]', { headers });
-            }
-            if (url.pathname === '/api/signals') {
-                const sigs = await env.PATTERN_CACHE.get('latest_signals');
-                return new Response(sigs || '[]', { headers });
-            }
+        }
+
+        // Debug: confirm env variable presence (no secrets returned)
+        if (url.pathname === '/api/debug-config') {
+            const cfg = {
+                has_service_role: !!env.SUPABASE_SERVICE_ROLE,
+                has_anon: !!env.SUPABASE_ANON_KEY,
+                supabase_url_set: !!env.SUPABASE_URL
+            };
+            return new Response(JSON.stringify(cfg), { headers });
+        }
+
+        // KV-backed API
+        if (url.pathname === '/api/patterns') {
+            const patterns = await env.PATTERN_CACHE.get('latest_patterns');
+            return new Response(patterns || '[]', { headers });
+        }
+        if (url.pathname === '/api/predictions') {
+            const preds = await env.PATTERN_CACHE.get('latest_predictions');
+            return new Response(preds || '[]', { headers });
+        }
+        if (url.pathname === '/api/signals') {
+            const sigs = await env.PATTERN_CACHE.get('latest_signals');
+            return new Response(sigs || '[]', { headers });
         }
 
         return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers });
     }
 };
 
-// ---------- Helpers ----------
+// ---------------- Core runner ----------------
+async function runAnalysis(env, { force = false } = {}) {
+    const data = await fetchRecentData(env);
+    if (!data || data.length < 50) {
+        console.log('Analyzer: not enough data; skipping.');
+        return { patterns: 0, predictions: 0, reason: 'not_enough_data' };
+    }
+    const patterns = findPatterns(data);
+    const predictions = generatePredictions(data);
+    await storeAnalysisResults(env, patterns, predictions, data, { force });
+    console.log(`Analyzer: patterns=${patterns.length}, predictions=${predictions.length}`);
+    return { patterns: patterns.length, predictions: predictions.length };
+}
+
+// ---------------- Data fetch -----------------
 async function fetchRecentData(env) {
     const resp = await fetch(
         `${env.SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=2500`,
         { headers: { 'apikey': env.SUPABASE_ANON_KEY, 'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}` } }
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+        const txt = await resp.text().catch(() => '');
+        console.error('fetchRecentData failed:', resp.status, txt);
+        return [];
+    }
     return await resp.json();
 }
 
+// ---------------- Writes + Alerts ------------
 async function postJSON(url, key, payload, label) {
     const headers = {
         'Content-Type': 'application/json',
@@ -65,17 +94,17 @@ async function postJSON(url, key, payload, label) {
     };
     const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
     if (!resp.ok) {
-        const txt = await resp.text();
+        const txt = await resp.text().catch(() => '');
         console.error(`Supabase write failed [${label}] ${resp.status}: ${txt}`);
     } else {
         console.log(`Supabase write ok [${label}] count=${Array.isArray(payload) ? payload.length : 1}`);
     }
 }
 
-async function storeAnalysisResults(env, patterns, predictions, data) {
-    const signals = generateTradingSignals(patterns, data);
+async function storeAnalysisResults(env, patterns, predictions, data, { force = false } = {}) {
+    const signals = generateTradingSignals(patterns, data, { force });
 
-    // KV cache
+    // Cache to KV
     await env.PATTERN_CACHE.put('latest_patterns', JSON.stringify(patterns), { expirationTtl: 3600 });
     await env.PATTERN_CACHE.put('latest_predictions', JSON.stringify(predictions), { expirationTtl: 3600 });
     await env.PATTERN_CACHE.put('latest_signals', JSON.stringify(signals), { expirationTtl: 3600 });
@@ -97,8 +126,9 @@ async function storeAnalysisResults(env, patterns, predictions, data) {
         }
     }
 
-    // DB writes using service key if present
+    // Use service role if present for DB writes
     const key = env.SUPABASE_SERVICE_ROLE || env.SUPABASE_ANON_KEY;
+    if (!key) console.warn('No Supabase key available in analyzer env');
 
     // 1) Patterns
     if (patterns.length) {
@@ -162,7 +192,7 @@ async function sendDiscordAlert(env, alert) {
     }
 }
 
-// ---- Analysis helpers (unchanged core) ----
+// ---------------- Analysis helpers -----------
 function movingAverage(arr) { if (!arr.length) return 0; return arr.reduce((a, b) => a + b, 0) / arr.length; }
 
 function calculateCorrelation(set1, set2) {
@@ -218,8 +248,7 @@ function findPatterns(data) {
 }
 
 function generatePredictions(data) {
-    const preds = []; const byItem = {};
-    data.forEach(r => { (byItem[r.item] ||= []).push(r); });
+    const preds = []; const byItem = {}; data.forEach(r => { (byItem[r.item] ||= []).push(r); });
 
     for (const [item, arr] of Object.entries(byItem)) {
         if (arr.length < 20) continue;
@@ -244,8 +273,11 @@ function generatePredictions(data) {
     return preds.slice(0, 10);
 }
 
-function generateTradingSignals(patterns, data) {
+// Add option to loosen thresholds for test runs (force=true)
+function generateTradingSignals(patterns, data, { force = false } = {}) {
     const signals = [];
+    const gate = force ? 0.1 : 0.7;
+
     for (const p of patterns) {
         let s = null;
         if (p.type === 'surge' && p.change > 15) {
@@ -255,15 +287,16 @@ function generateTradingSignals(patterns, data) {
         } else if (p.type === 'golden_cross') {
             s = { type: 'BUY', item: p.item, reason: 'Golden cross detected - bullish', confidence: 0.75, current_price: p.currentPrice, action: `Uptrend for ${p.item}` };
         }
-        if (s && s.confidence > 0.7) signals.push(s);
+        if (s && s.confidence > gate) signals.push(s);
     }
-    signals.push(...findArbitrageOpportunities(data));
+
+    // Arbitrage
+    signals.push(...findArbitrageOpportunities(data, gate));
     return signals;
 }
 
-function findArbitrageOpportunities(data) {
-    const ops = []; const groups = {};
-    data.forEach(r => { (groups[r.item] ||= []).push(r); });
+function findArbitrageOpportunities(data, gate = 0.7) {
+    const ops = []; const groups = {}; data.forEach(r => { (groups[r.item] ||= []).push(r); });
     for (const [item, rows] of Object.entries(groups)) {
         const latest = rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
         if (latest && latest.buy_median != null && latest.sell_median != null) {
@@ -271,7 +304,7 @@ function findArbitrageOpportunities(data) {
             if (profit > 5) {
                 const pct = latest.sell_median === 0 ? Infinity : (profit / latest.sell_median) * 100;
                 if (pct > 15) {
-                    ops.push({ type: 'ARBITRAGE', item, buy_price: latest.sell_median, sell_price: latest.buy_median, profit, profit_pct: pct, confidence: 0.9, action: `Arbitrage: Buy at ${latest.sell_median}p, sell at ${latest.buy_median}p for ${profit}p` });
+                    ops.push({ type: 'ARBITRAGE', item, buy_price: latest.sell_median, sell_price: latest.buy_median, profit, profit_pct: pct, confidence: Math.max(0.9, gate), action: `Arbitrage: Buy at ${latest.sell_median}p, sell at ${latest.buy_median}p for ${profit}p` });
                 }
             }
         }

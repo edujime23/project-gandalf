@@ -8,6 +8,4 @@ logs/
  
 node_modules/
 .wrangler/
-config/config.env
-#dashboard/config.js
 .vs/

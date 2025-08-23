@@ -9,3 +9,4 @@ logs/
 node_modules/
 .wrangler/
 .vs/
+.env

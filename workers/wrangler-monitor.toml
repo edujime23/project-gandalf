@@ -9,8 +9,3 @@ crons = ["*/30 * * * *"]  # Every 30 minutes
 [[kv_namespaces]]
 binding = "MARKET_CACHE"
 id = "fdb7c06916734e528b4d37a963a52a04"  # Same as collector
-
-[vars]
-SUPABASE_URL = "https://noovgylllgdyxylnqbux.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vb3ZneWxsbGdkeXh5bG5xYnV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU4MTc4MTMsImV4cCI6MjA3MTM5MzgxM30.qFUArh7c0BvsueTjzpu_NLZESRAeqIho3k64iQV0fSc"
-DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1408254001513893960/WVl1A6G5wJB_Z899xoLKnVwv8lJ30Porg-w13YK6haaCUl4Sc-k08qXjaI_tGBJQ45BT"

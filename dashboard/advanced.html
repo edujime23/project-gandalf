@@ -150,19 +150,17 @@
         let priceChart = null;
 
         // Helpers
-        const fmt = (v, digits = 0) =>
-            (v === null || v === undefined || Number.isNaN(Number(v))) ? 'N/A' : Number(v).toFixed(digits);
-        const fmtPct = (v, digits = 1) =>
-            (v === null || v === undefined || !isFinite(v)) ? '—' : `${Number(v).toFixed(digits)}%`;
+        const fmt = (v, d = 0) => (v === null || v === undefined || Number.isNaN(Number(v))) ? 'N/A' : Number(v).toFixed(d);
+        const fmtPct = (v, d = 1) => (v === null || v === undefined || !isFinite(v)) ? '—' : `${Number(v).toFixed(d)}%`;
         const up = v => Number(v) >= 0;
 
         async function loadAllData() {
             try {
                 await Promise.all([
                     loadPrices(),
-                    loadPatterns(),
-                    loadPredictions(),
-                    loadMlPredictions(),
+                    loadPatterns(),        // now from Supabase discovered_patterns (last 1h)
+                    loadPredictions(),     // analyzer (KV)
+                    loadMlPredictions(),   // ML (DB)
                     loadTrackedItems(),
                     loadMlAccuracy()
                 ]);
@@ -219,38 +217,66 @@
             }
         }
 
+        // UPDATED: load patterns from Supabase discovered_patterns (last 1 hour)
         async function loadPatterns() {
             try {
-                const response = await fetch(`${API_BASE_URL}/patterns`);
-                if (!response.ok) throw new Error('Patterns fetch failed');
-                const patterns = await response.json();
+                const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1h
+                const url = `${API_BASE_URL}/discovered_patterns?select=pattern_type,pattern_data,confidence,discovered_at&discovered_at=gte.${sinceIso}&order=discovered_at.desc&limit=100`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('Patterns (DB) fetch failed');
+                const rows = await resp.json();
 
                 const grid = document.getElementById('patterns-grid');
                 grid.innerHTML = '';
-                if (!patterns.length) {
+                if (!rows.length) {
                     grid.innerHTML = '<div class="card">No significant patterns detected in the last hour.</div>';
                     return;
                 }
 
-                patterns.forEach(pattern => {
+                rows.forEach(row => {
+                    const type = row.pattern_type;
+                    const data = (typeof row.pattern_data === 'string')
+                        ? (safeParse(row.pattern_data) ?? {})
+                        : (row.pattern_data ?? {});
+
+                    const conf = row.confidence ?? 0;
                     const card = document.createElement('div');
                     card.className = 'card pattern-card';
-                    if (pattern.type === 'correlation') {
-                        card.innerHTML = `<h3>Correlation Found</h3>
-                  <div class="correlation"><span>${pattern.item1.replace(/_/g, ' ')}</span><span class="arrow">↔️</span><span>${pattern.item2.replace(/_/g, ' ')}</span></div>
-                  <div>Strength: ${fmtPct((pattern.strength ?? 0) * 100, 0)}</div>`;
-                    } else if (pattern.type === 'surge' || pattern.type === 'crash') {
-                        card.innerHTML = `<h3>${pattern.type === 'surge' ? '📈 Price Surge' : '📉 Price Crash'}</h3>
-                  <div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div>
-                  <div class="change ${pattern.type === 'surge' ? 'positive' : 'negative'}">${fmt(pattern.change)}% change</div>
-                  <div>From ${fmt(pattern.from)}p to ${fmt(pattern.to)}p</div>`;
-                    } else if (pattern.type === 'golden_cross') {
-                        card.innerHTML = `<h3>🎯 Golden Cross Signal</h3>
-                  <div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div>
-                  <div>MA5: ${fmt(pattern.ma5, 1)}p</div>
-                  <div>MA20: ${fmt(pattern.ma20, 1)}p</div>
-                  <div class="positive">Bullish Signal</div>`;
+
+                    if (type === 'correlation') {
+                        const i1 = (data.item1 || '').replace(/_/g, ' ');
+                        const i2 = (data.item2 || '').replace(/_/g, ' ');
+                        const str = Number(data.strength ?? 0);
+                        card.innerHTML = `
+                  <h3>Correlation Found</h3>
+                  <div class="correlation"><span>${i1}</span><span class="arrow">↔️</span><span>${i2}</span></div>
+                  <div>Strength: ${fmtPct(str * 100, 0)} • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
+                    } else if (type === 'surge' || type === 'crash') {
+                        const name = (data.item || '').replace(/_/g, ' ').toUpperCase();
+                        // compute change if missing
+                        let ch = data.change;
+                        if ((ch === undefined || ch === null) && data.from != null && data.to != null && data.from !== 0) {
+                            ch = ((data.to - data.from) / data.from) * 100;
+                        }
+                        card.innerHTML = `
+                  <h3>${type === 'surge' ? '📈 Price Surge' : '📉 Price Crash'}</h3>
+                  <div>${name}</div>
+                  <div class="change ${type === 'surge' ? 'positive' : 'negative'}">${fmtPct(ch)}</div>
+                  <div>From ${fmt(data.from)}p to ${fmt(data.to)}p • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
+                    } else if (type === 'golden_cross') {
+                        const name = (data.item || '').replace(/_/g, ' ').toUpperCase();
+                        card.innerHTML = `
+                  <h3>🎯 Golden Cross Signal</h3>
+                  <div>${name}</div>
+                  <div>MA5: ${fmt(data.ma5, 1)}p • MA20: ${fmt(data.ma20, 1)}p</div>
+                  <div class="positive">Bullish Signal • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
+                    } else {
+                        // Fallback for unknown pattern types
+                        card.innerHTML = `
+                  <h3>Pattern: ${type}</h3>
+                  <div style="font-size:12px;color:#94a3b8">${escapeHtml(JSON.stringify(data))}</div>`;
                     }
+
                     grid.appendChild(card);
                 });
             } catch (err) {
@@ -310,7 +336,6 @@
                 }
                 const preds = Array.from(latestByItem.values());
 
-                // Compute change client-side
                 preds.forEach(p => {
                     if (p.current_price != null && p.current_price !== 0 && p.predicted_price != null) {
                         p.predicted_change = ((p.predicted_price - p.current_price) / p.current_price) * 100;
@@ -380,7 +405,6 @@
         async function loadMlAccuracy() {
             try {
                 const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-                // Fetch scored predictions in last 24h
                 const resp = await fetch(`${API_BASE_URL}/predictions?select=accuracy,predicted_at&predicted_at=gte.${sinceIso}&accuracy=not.is.null&limit=1000`);
                 if (!resp.ok) throw new Error('Accuracy fetch failed');
                 const rows = await resp.json();
@@ -399,6 +423,14 @@
                 console.error('loadMlAccuracy error:', e);
                 document.getElementById('ml-accuracy-grid').innerHTML = '<div class="card">Failed to load ML accuracy.</div>';
             }
+        }
+
+        // Safe JSON and HTML helpers
+        function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"'`=\/]/g, s => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;', '`': '&#x60;', '=': '&#x3D;'
+            }[s]));
         }
 
         function updatePriceChart(priceHistory) {

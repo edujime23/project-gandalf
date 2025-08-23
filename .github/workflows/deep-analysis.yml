@@ -1,4 +1,4 @@
-# FINAL & FIXED deep-analysis.yml
+﻿# FINAL & FIXED deep-analysis.yml
 name: Deep Market Analysis
 
 on:
@@ -43,3 +43,11 @@ jobs:
       with:
         name: analysis-results-${{ github.run_id }}
         path: output/
+    - name: Notify on Failure
+      if: failure()
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      run: |
+        curl -H "Content-Type: application/json" \
+        -d "{\"content\": \"**GitHub Action Failed!**\n**Workflow:** ${{ github.workflow }}\n**Repo:** ${{ github.repository }}\n**Link:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+        $DISCORD_WEBHOOK

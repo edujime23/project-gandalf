@@ -1,4 +1,4 @@
-# FINAL & FIXED ml-training.yml
+﻿# FINAL & FIXED ml-training.yml
 name: ML Model Training
 
 on:
@@ -45,3 +45,11 @@ jobs:
         git add models/
         git diff --quiet && git diff --staged --quiet || git commit -m "chore: Update ML models [skip ci]"
         git push || echo "No changes to commit"
+    - name: Notify on Failure
+      if: failure()
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      run: |
+        curl -H "Content-Type: application/json" \
+        -d "{\"content\": \"**GitHub Action Failed!**\n**Workflow:** ${{ github.workflow }}\n**Repo:** ${{ github.repository }}\n**Link:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+        $DISCORD_WEBHOOK

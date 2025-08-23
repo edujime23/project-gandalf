@@ -42,9 +42,20 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add models/
-        git diff --quiet && git diff --staged --quiet || git commit -m "chore: Update ML models [skip ci]"
-        git push || echo "No changes to commit"
+        # Only try to add, commit, and push if the models directory exists
+        if [ -d "models" ]; then
+          git add models/
+          # Only commit if there are staged changes
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: Update ML models [skip ci]"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+        else
+          echo "Models directory not found, skipping commit."
+        fi
+
     - name: Notify on Failure
       if: failure()
       env:

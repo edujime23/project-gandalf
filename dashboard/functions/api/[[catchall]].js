@@ -11,15 +11,29 @@ export async function onRequest(context) {
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS, HEAD',
-        'Access-Control-Allow-Headers': 'Content-Type, apikey, Authorization'
+        'Access-Control-Allow-Headers': 'Content-Type, apikey, Authorization, x-admin-token'
     };
 
-    // Handle CORS preflight
+    // CORS preflight
     if (request.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
+        // Protected: run analyzer now
+        if (apiPath === 'admin/analyzer/run') {
+            const token = request.headers.get('x-admin-token') || url.searchParams.get('token');
+            if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
+                return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+                    status: 401,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+            const targetUrl = `${ANALYZER_URL}/api/run-now`;
+            const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+        }
+
         // 1) ML predictions direct from Supabase
         if (apiPath.startsWith('ml-predictions')) {
             const targetUrl = `${SUPABASE_URL}/rest/v1/predictions?order=predicted_at.desc&limit=100${url.search}`;
@@ -64,7 +78,7 @@ export async function onRequest(context) {
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${SUPABASE_KEY}`,
                 'Content-Type': 'application/json',
-                'Prefer': 'return=minimal'
+                'Prefer': 'return-minimal'
             }
         };
 

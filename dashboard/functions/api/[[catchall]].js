@@ -18,6 +18,27 @@ export async function onRequest(context) {
         }
     };
 
+    // Add this near the top of onRequest after apiPath is computed
+    if (apiPath.startsWith('ml-predictions')) {
+        const SUPABASE_URL = context.env.SUPABASE_URL;
+        const SUPABASE_KEY = context.env.SUPABASE_ANON_KEY;
+        const targetUrl = `${SUPABASE_URL}/rest/v1/predictions?order=predicted_at.desc&limit=100${url.search}`;
+        const requestOptions = {
+            headers: {
+                'User-Agent': 'Gandalf-API-Gateway/1.0',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        };
+        const resp = await fetch(targetUrl, requestOptions);
+        const newHeaders = new Headers(resp.headers);
+        newHeaders.set('Access-Control-Allow-Origin', '*');
+        newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization');
+        return new Response(resp.body, { status: resp.status, headers: newHeaders });
+    }
+
     // Route the request to the correct destination
     if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
         // Forward to the Analyzer worker

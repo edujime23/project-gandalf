@@ -95,7 +95,7 @@ def upsert_predictions(preds):
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        # merge-duplicates = UPSERT, return=minimal keeps payload small
+        # merge-duplicates ensures UPSERT behavior
         "Prefer": "return=minimal,resolution=merge-duplicates",
     }
     r = requests.post(url, headers=headers, data=json.dumps(preds), timeout=30)

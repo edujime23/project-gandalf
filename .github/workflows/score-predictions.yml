@@ -21,11 +21,13 @@ jobs:
           python-version: "3.10"
 
       - name: Install deps
-        run: pip install requests
+        run: |
+          pip install requests python-dateutil
 
       - name: Score predictions (30m horizon)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE }}   # service role to write
           PREDICTION_HORIZON_MIN: "30"
-        run: python scripts/score_predictions.py
+        run: |
+          python scripts/score_predictions.py

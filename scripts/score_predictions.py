@@ -1,5 +1,6 @@
 import os, requests, json
 from datetime import datetime, timedelta, timezone
+from dateutil import parser as du_parser
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -15,6 +16,19 @@ def q(url, params=None, method="GET", body=None):
         raise SystemExit(f"{method} {url} failed: {r.status_code} {r.text}")
     return r
 
+def parse_ts(ts_str: str) -> datetime:
+    """
+    Robust ISO-8601 parser:
+    - Handles fractional seconds of any length
+    - Handles 'Z' or '+00:00' or no tz (assumes UTC if missing)
+    """
+    if ts_str is None:
+        raise ValueError("Timestamp is None")
+    dt = du_parser.isoparse(ts_str)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
 def fetch_pending_predictions(limit=200, horizon_minutes=30):
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=horizon_minutes)).isoformat()
     url = f"{SUPABASE_URL}/rest/v1/predictions"
@@ -29,6 +43,7 @@ def fetch_pending_predictions(limit=200, horizon_minutes=30):
 
 def fetch_actual_price(item, target_time_iso, search_window_minutes=60):
     url = f"{SUPABASE_URL}/rest/v1/market_data"
+
     # First try >= target time
     params = {
         "select": "timestamp,sell_median",
@@ -40,8 +55,8 @@ def fetch_actual_price(item, target_time_iso, search_window_minutes=60):
     data = q(url, params=params).json()
     if data:
         return float(data[0]["sell_median"]) if data[0]["sell_median"] is not None else None
-    # Fallback: closest within +/- window
-    # After
+
+    # Fallback: choose the closest before/after within window
     after = q(url, params={
         "select": "timestamp,sell_median",
         "item": f"eq.{item}",
@@ -49,7 +64,6 @@ def fetch_actual_price(item, target_time_iso, search_window_minutes=60):
         "order": "timestamp.asc",
         "limit": "1"
     }).json()
-    # Before
     before = q(url, params={
         "select": "timestamp,sell_median",
         "item": f"eq.{item}",
@@ -58,33 +72,34 @@ def fetch_actual_price(item, target_time_iso, search_window_minutes=60):
         "limit": "1"
     }).json()
 
-    def parse_ts(row):
-        return datetime.fromisoformat(row["timestamp"].replace("Z","+00:00"))
+    def parse_ts_row(row):
+        return parse_ts(row["timestamp"])
 
     candidates = []
     for r in after:
-        candidates.append(("after", parse_ts(r), r["sell_median"]))
+        candidates.append(("after", parse_ts_row(r), r["sell_median"]))
     for r in before:
-        candidates.append(("before", parse_ts(r), r["sell_median"]))
+        candidates.append(("before", parse_ts_row(r), r["sell_median"]))
 
     if not candidates:
         return None
 
-    # Choose the one closest in absolute time difference, but only within search window
-    target = datetime.fromisoformat(target_time_iso.replace("Z","+00:00"))
-    best = None
+    target = parse_ts(target_time_iso)
+    best_val = None
     best_dt = timedelta(days=999)
-    for label, ts, val in candidates:
-        if val is None: 
+
+    for _, ts, val in candidates:
+        if val is None:
             continue
         dt = abs(ts - target)
         if dt <= timedelta(minutes=search_window_minutes) and dt < best_dt:
             best_dt = dt
-            best = float(val)
-    return best
+            best_val = float(val)
+
+    return best_val
 
 def update_prediction(pred_id, actual_price, predicted_price):
-    # accuracy: 1 - absolute percentage error (clipped 0..1)
+    # accuracy = 1 - absolute percentage error (clipped to [0,1])
     if actual_price is None or predicted_price is None or actual_price == 0:
         acc = None
     else:
@@ -94,19 +109,23 @@ def update_prediction(pred_id, actual_price, predicted_price):
     url = f"{SUPABASE_URL}/rest/v1/predictions"
     params = { "id": f"eq.{pred_id}" }
     body = { "actual_price": actual_price, "accuracy": acc }
-    # PATCH updates row by filter
     q(url, params=params, method="PATCH", body=body)
 
 def main():
     horizon = int(os.getenv("PREDICTION_HORIZON_MIN", "30"))
     batch = fetch_pending_predictions(limit=300, horizon_minutes=horizon)
     print(f"Found {len(batch)} predictions to score...")
+
     for row in batch:
         item = row["item"]
-        predicted_at = datetime.fromisoformat(row["predicted_at"].replace("Z","+00:00"))
-        target_time = (predicted_at + timedelta(minutes=horizon)).isoformat()
-        actual = fetch_actual_price(item, target_time)
+        predicted_at = parse_ts(row["predicted_at"])
+        target_time_dt = predicted_at + timedelta(minutes=horizon)
+        # Use ISO with timezone info preserved
+        target_time_iso = target_time_dt.isoformat()
+
+        actual = fetch_actual_price(item, target_time_iso)
         update_prediction(row["id"], actual, row["predicted_price"])
+
     print("Scoring complete.")
 
 if __name__ == "__main__":

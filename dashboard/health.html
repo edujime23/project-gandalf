@@ -57,19 +57,6 @@
             margin: 10px 0;
         }
 
-        .logs {
-            background: #0a0a0a;
-            color: #a7a7a7;
-            border: 1px solid #334155;
-            padding: 20px;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            height: 300px;
-            overflow-y: scroll;
-            white-space: pre-wrap;
-        }
-
         h1 {
             font-size: 32px;
             margin-bottom: 10px;
@@ -164,16 +151,17 @@
 
         async function checkAllHealth() {
             await Promise.all([
-                checkHealth('collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
-                checkHealth('analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
-                checkHealth('monitor', 'https://gandalf-monitor.psnedujime.workers.dev'),
+                checkWorkerHealth('collector', 'https://gandalf-collector.psnedujime.workers.dev/health'),
+                checkWorkerHealth('analyzer', 'https://gandalf-analyzer.psnedujime.workers.dev'),
+                checkWorkerHealth('monitor', 'https://gandalf-monitor.psnedujime.workers.dev'),
                 checkDatabaseHealth(),
-                loadMetrics(),
-                loadLogs()
+                loadMetrics()
             ]);
         }
+
+        // Check on load and then every minute
         checkAllHealth();
-        setInterval(checkAllHealth, 60000); // Check every minute
+        setInterval(checkAllHealth, 60000); // FIXED THE TYPO HERE
     </script>
 </body>
 </html>

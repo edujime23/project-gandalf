@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
-# Allow configuring minimum points per item to train
-MIN_TRAIN_POINTS = int(os.getenv('MIN_TRAIN_POINTS', '80'))  # default 80 for initial runs
+# Configurable minimum points per item to train (default 80 for initial runs)
+MIN_TRAIN_POINTS = int(os.getenv('MIN_TRAIN_POINTS', '80'))
 
 class ModelTrainer:
     def __init__(self):
@@ -21,24 +21,27 @@ class ModelTrainer:
 
     def fetch_training_data(self, days=30, page_size=1000):
         """
-        Fetch all training data for the last `days` days using server-side date filtering
-        and pagination via the Range header to bypass the 1000-row cap.
+        Fetch all rows within the last `days` using server-side filtering and
+        pagination via Range headers to bypass the 1000-row cap.
         """
         if not SUPABASE_URL or not SUPABASE_KEY:
             raise RuntimeError("SUPABASE_URL or SUPABASE_KEY not set")
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        formatted_cutoff = cutoff.isoformat()
+        # Use UTC 'Z' form to avoid '+00:00' parsing issues in URLs
+        formatted_cutoff = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-        base_url = (
-            f"{SUPABASE_URL}/rest/v1/market_data"
-            f"?select=*&timestamp=gte.{formatted_cutoff}&order=timestamp.asc"
-        )
-
+        base_endpoint = f"{SUPABASE_URL}/rest/v1/market_data"
         headers = {
             "apikey": SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Prefer": "count=exact",
+            "Range-Unit": "items",
+        }
+        params = {
+            "select": "*",
+            "timestamp": f"gte.{formatted_cutoff}",
+            "order": "timestamp.asc",
         }
 
         all_rows = []
@@ -46,23 +49,24 @@ class ModelTrainer:
         page_idx = 0
 
         while True:
-            # Paginate using Range header e.g. 0-999, 1000-1999, ...
             range_header = {"Range": f"{offset}-{offset + page_size - 1}"}
             req_headers = {**headers, **range_header}
 
-            resp = requests.get(base_url, headers=req_headers, timeout=30)
-            resp.raise_for_status()
-
+            resp = requests.get(base_endpoint, headers=req_headers, params=params, timeout=30)
+            if not resp.ok:
+                # Helpful debug if we ever hit a 4xx again
+                raise requests.HTTPError(
+                    f"{resp.status_code} Error: {resp.text} for URL: {resp.url}"
+                )
             page = resp.json()
             page_count = len(page)
             all_rows.extend(page)
 
-            # Debug information
             content_range = resp.headers.get("Content-Range", "unknown")
             print(f"DEBUG: Page {page_idx} fetched {page_count} rows (Content-Range: {content_range})")
 
             if page_count < page_size:
-                break  # last page
+                break
 
             offset += page_size
             page_idx += 1
@@ -77,7 +81,7 @@ class ModelTrainer:
         # Robust timestamp parsing
         df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601")
 
-        # Coerce numeric columns to numbers (in case of string JSON)
+        # Ensure numeric columns are numeric
         for col in ["sell_median", "buy_median", "spread", "sell_orders", "buy_orders"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -87,12 +91,11 @@ class ModelTrainer:
     def create_features(self, df, item):
         """
         Create features and target for a specific item.
-        Requires at least ~100 points after feature engineering to be useful.
         """
         item_df = df[df["item"] == item].copy()
         item_df = item_df.sort_values("timestamp")
 
-        # Basic sanity checks
+        # Need a reasonable history
         if len(item_df) < 60:
             return None, None
 
@@ -103,7 +106,7 @@ class ModelTrainer:
         features["day_of_week"] = item_df["timestamp"].dt.dayofweek
         features["day_of_month"] = item_df["timestamp"].dt.day
 
-        # Price features (use sell_median as core price)
+        # Price features
         price = item_df["sell_median"]
         features["price_ma_6"] = price.rolling(6).mean()
         features["price_ma_24"] = price.rolling(24).mean()
@@ -127,7 +130,7 @@ class ModelTrainer:
             features["spread_ma"] = np.nan
             features["spread_ratio"] = np.nan
 
-        # Target: price in +6 steps (roughly 6 collection intervals)
+        # Target: +6 steps ahead
         target = price.shift(-6)
 
         combined = pd.concat([features, target.rename("future_price")], axis=1).dropna()
@@ -174,19 +177,16 @@ class ModelTrainer:
             print("No data returned after fetch, exiting.")
             return
 
-        # Show basic distribution
         item_counts = df["item"].value_counts()
         print("--- DEBUG: Item counts in fetched window ---")
         print(item_counts.head(20))
         print("--------------------------------------------")
 
-        # Decide which items to train
-        min_points = MIN_TRAIN_POINTS
-        print(f"DEBUG: Using MIN_TRAIN_POINTS = {min_points}")
-        items_to_train = item_counts[item_counts >= min_points].index.tolist()
-        print(f"Found {len(items_to_train)} items with >= {min_points} points to train on.")
+        print(f"DEBUG: Using MIN_TRAIN_POINTS = {MIN_TRAIN_POINTS}")
+        items_to_train = item_counts[item_counts >= MIN_TRAIN_POINTS].index.tolist()
+        print(f"Found {len(items_to_train)} items with >= {MIN_TRAIN_POINTS} points to train on.")
 
-        # Train top N by availability to stay within Action time
+        # Limit to 10 items to keep Action runtime safe
         items_to_train = items_to_train[:10]
 
         for item in items_to_train:

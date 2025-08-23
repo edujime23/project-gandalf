@@ -4,6 +4,8 @@
     <title>Gandalf Market Intelligence</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Silence favicon 404 -->
+    <link rel="icon" href="data:,">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
@@ -53,6 +55,10 @@
             border-left: 4px solid #f59e0b;
         }
 
+        .signal-card {
+            border-left: 4px solid #a855f7;
+        }
+
         .price {
             font-size: 32px;
             font-weight: bold;
@@ -61,10 +67,12 @@
         }
 
         .change {
-            font-size: 18px;
-            padding: 5px 10px;
-            border-radius: 20px;
-            display: inline-block;
+            font-size: 14px;
+            padding: 6px 10px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .positive {
@@ -80,12 +88,15 @@
         h1 {
             margin: 0;
             font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         h2 {
             color: #cbd5e1;
             margin-top: 30px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         h3 {
@@ -94,52 +105,113 @@
         }
 
         .status {
-            display: inline-block;
-            padding: 8px 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
             background: #f59e0b;
             color: #0f172a;
-            border-radius: 20px;
-            font-size: 14px;
-            margin-left: 20px;
-            font-weight: bold;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
         }
 
-        .correlation {
+            .status.live {
+                background: #10b981;
+                color: #052e2b;
+            }
+
+        .muted {
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .row {
             display: flex;
+            gap: 12px;
             align-items: center;
-            gap: 10px;
+            flex-wrap: wrap;
         }
 
-        .arrow {
-            font-size: 24px;
+        .badge {
+            font-size: 12px;
+            padding: 4px 8px;
+            background: #334155;
+            border-radius: 999px;
+            color: #cbd5e1;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, #1f2937 25%, #233044 37%, #1f2937 63%);
+            background-size: 400% 100%;
+            animation: shimmer 1.2s infinite;
+            border-radius: 8px;
+            height: 90px;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 100% 0;
+            }
+
+            100% {
+                background-position: 0 0;
+            }
         }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="container">
-            <h1>🧙‍♂️ Gandalf Market Intelligence <span class="status" id="status">Connecting...</span></h1>
+            <h1>
+                🧙‍♂️ Gandalf Market Intelligence
+                <span class="status" id="status">Connecting...</span>
+                <span class="muted" id="last-updated"></span>
+            </h1>
         </div>
     </div>
 
     <div class="container">
         <h2>📊 Current Market Prices</h2>
-        <div class="grid" id="prices-grid"></div>
+        <div class="grid" id="prices-grid">
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
 
         <h2>🔍 Discovered Patterns</h2>
-        <div class="grid" id="patterns-grid"></div>
+        <div class="grid" id="patterns-grid">
+            <div class="card muted">Loading patterns…</div>
+        </div>
 
         <h2>🔮 Price Predictions (Analyzer)</h2>
-        <div class="grid" id="predictions-grid"></div>
+        <div class="grid" id="predictions-grid">
+            <div class="card muted">Waiting for analyzer…</div>
+        </div>
 
         <h2>🤖 ML Predictions (trained models)</h2>
-        <div class="grid" id="ml-predictions-grid"></div>
+        <div class="grid" id="ml-predictions-grid">
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
 
         <h2>🧾 Currently Tracked Items</h2>
-        <div class="grid" id="tracked-items-grid"></div>
+        <div class="grid" id="tracked-items-grid">
+            <div class="card muted">Loading tracked items…</div>
+        </div>
 
         <h2>🎯 ML Accuracy (last 24h)</h2>
-        <div class="grid" id="ml-accuracy-grid"></div>
+        <div class="grid" id="ml-accuracy-grid">
+            <div class="card muted">Calculating…</div>
+        </div>
+
+        <h2>📡 Live Signals</h2>
+        <div class="grid" id="signals-grid">
+            <div class="card muted">Fetching signals…</div>
+        </div>
 
         <h2>📈 Market Trends (Top 5 Items)</h2>
         <div class="card"><canvas id="priceChart"></canvas></div>
@@ -149,11 +221,44 @@
         const API_BASE_URL = '/api';
         let priceChart = null;
 
-        // Helpers
+        // ---------- Utilities ----------
         const fmt = (v, d = 0) => (v === null || v === undefined || Number.isNaN(Number(v))) ? 'N/A' : Number(v).toFixed(d);
         const fmtPct = (v, d = 1) => (v === null || v === undefined || !isFinite(v)) ? '—' : `${Number(v).toFixed(d)}%`;
         const up = v => Number(v) >= 0;
 
+        function setStatus(ok) {
+            const el = document.getElementById('status');
+            if (ok) { el.textContent = 'Live'; el.classList.add('live'); }
+            else { el.textContent = 'Error'; el.classList.remove('live'); }
+            document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        async function fetchJson(path, { method = 'GET', headers = {}, body, timeoutMs = 15000 } = {}) {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), timeoutMs);
+            try {
+                const resp = await fetch(`${path}`, {
+                    method,
+                    headers: { 'Content-Type': 'application/json', ...headers },
+                    body,
+                    signal: ctrl.signal
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text().catch(() => '');
+                    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${txt}`);
+                }
+                return await resp.json();
+            } finally { clearTimeout(t); }
+        }
+
+        function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"'`=\/]/g, s => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;', '`': '&#x60;', '=': '&#x3D;'
+            }[s]));
+        }
+
+        // ---------- Loaders ----------
         async function loadAllData() {
             try {
                 await Promise.all([
@@ -162,40 +267,33 @@
                     loadPredictions(),
                     loadMlPredictions(),
                     loadTrackedItems(),
-                    loadMlAccuracy()
+                    loadMlAccuracy(),
+                    loadSignalsDb()
                 ]);
-                const statusEl = document.getElementById('status');
-                statusEl.textContent = 'Live';
-                statusEl.style.background = '#10b981';
+                setStatus(true);
             } catch (error) {
                 console.error('Error loading data:', error);
-                const statusEl = document.getElementById('status');
-                statusEl.textContent = 'Error';
-                statusEl.style.background = '#ef4444';
+                setStatus(false);
             }
         }
 
         async function loadPrices() {
             try {
-                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
-                if (!response.ok) throw new Error('Prices fetch failed');
-                const data = await response.json();
-
-                const latestPrices = {};
-                const priceHistory = {};
+                const data = await fetchJson(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
+                const latest = {};
+                const hist = {};
                 data.forEach(row => {
-                    if (!latestPrices[row.item]) latestPrices[row.item] = row;
-                    if (!priceHistory[row.item]) priceHistory[row.item] = [];
-                    priceHistory[row.item].push({ x: new Date(row.timestamp), y: row.sell_median });
+                    if (!latest[row.item]) latest[row.item] = row;
+                    (hist[row.item] ||= []).push({ x: new Date(row.timestamp), y: row.sell_median });
                 });
 
                 const grid = document.getElementById('prices-grid');
                 grid.innerHTML = '';
-                Object.values(latestPrices).forEach(itemData => {
+                Object.values(latest).forEach(itemData => {
                     const card = document.createElement('div');
                     card.className = 'card price-card';
-                    const historyForItem = priceHistory[itemData.item] || [];
-                    const oldData = historyForItem.length > 24 ? historyForItem[historyForItem.length - 24] : null;
+                    const series = hist[itemData.item] || [];
+                    const oldData = series.length > 24 ? series[series.length - 24] : null;
                     let change = 0;
                     if (oldData && itemData.sell_median != null && oldData.y != null) {
                         change = ((itemData.sell_median - oldData.y) / oldData.y) * 100;
@@ -203,14 +301,12 @@
                     card.innerHTML = `
                 <h3>${itemData.item.replace(/_/g, ' ').toUpperCase()}</h3>
                 <div class="price">${fmt(itemData.sell_median)}p</div>
-                <div><span>Buy: ${fmt(itemData.buy_median)}p</span> | <span>Spread: ${fmt(itemData.spread)}p</span></div>
-                <div class="change ${up(change) ? 'positive' : 'negative'}">
-                  ${up(change) ? '↑' : '↓'} ${fmtPct(Math.abs(change))}
-                </div>`;
+                <div class="muted">Buy: ${fmt(itemData.buy_median)}p • Spread: ${fmt(itemData.spread)}p</div>
+                <div class="change ${up(change) ? 'positive' : 'negative'}">${up(change) ? '📈' : '📉'} ${fmtPct(Math.abs(change))} (≈2h)</div>`;
                     grid.appendChild(card);
                 });
 
-                updatePriceChart(priceHistory);
+                updatePriceChart(hist);
             } catch (err) {
                 console.error('loadPrices error:', err);
                 document.getElementById('prices-grid').innerHTML = '<div class="card">Failed to load prices.</div>';
@@ -221,7 +317,7 @@
         async function loadPatterns() {
             try {
                 const grid = document.getElementById('patterns-grid');
-                const windows = [1, 3, 6]; // hours
+                const windows = [1, 3, 6];
                 let rows = [];
                 let usedWindow = null;
 
@@ -243,9 +339,7 @@
 
                 if (usedWindow && usedWindow > 1) {
                     const note = document.createElement('div');
-                    note.className = 'card';
-                    note.style.fontSize = '12px';
-                    note.style.color = '#94a3b8';
+                    note.className = 'note';
                     note.textContent = `Showing last ${usedWindow}h (no patterns in the last hour).`;
                     grid.appendChild(note);
                 }
@@ -263,8 +357,10 @@
                         const str = Number(data.strength ?? 0);
                         card.innerHTML = `
                   <h3>Correlation Found</h3>
-                  <div class="correlation"><span>${i1}</span><span class="arrow">↔️</span><span>${i2}</span></div>
-                  <div>Strength: ${fmtPct(str * 100, 0)} • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
+                  <div class="row">
+                    <span class="badge">${i1}</span><span class="arrow">↔️</span><span class="badge">${i2}</span>
+                  </div>
+                  <div class="muted">Strength: ${fmtPct(str * 100, 0)} • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
                     } else if (type === 'surge' || type === 'crash') {
                         const name = (data.item || '').replace(/_/g, ' ').toUpperCase();
                         let ch = data.change;
@@ -275,41 +371,37 @@
                   <h3>${type === 'surge' ? '📈 Price Surge' : '📉 Price Crash'}</h3>
                   <div>${name}</div>
                   <div class="change ${type === 'surge' ? 'positive' : 'negative'}">${fmtPct(ch)}</div>
-                  <div>From ${fmt(data.from)}p to ${fmt(data.to)}p • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
+                  <div class="muted">From ${fmt(data.from)}p to ${fmt(data.to)}p • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
                     } else if (type === 'golden_cross') {
                         const name = (data.item || '').replace(/_/g, ' ').toUpperCase();
                         card.innerHTML = `
                   <h3>🎯 Golden Cross Signal</h3>
                   <div>${name}</div>
-                  <div>MA5: ${fmt(data.ma5, 1)}p • MA20: ${fmt(data.ma20, 1)}p</div>
-                  <div class="positive">Bullish Signal • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
+                  <div class="muted">MA5: ${fmt(data.ma5, 1)}p • MA20: ${fmt(data.ma20, 1)}p</div>
+                  <div class="change positive">Bullish Signal • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
                     } else {
                         card.innerHTML = `
                   <h3>Pattern: ${type}</h3>
-                  <div style="font-size:12px;color:#94a3b8">${escapeHtml(JSON.stringify(data))}</div>`;
+                  <div class="muted" style="font-size:12px;">${escapeHtml(JSON.stringify(data))}</div>`;
                     }
 
                     grid.appendChild(card);
                 });
             } catch (err) {
                 console.error('loadPatterns error:', err);
-                document.getElementById('patterns-grid').innerHTML = '<div class="card' > Failed to load patterns.</div > ";
+                document.getElementById('patterns-grid').innerHTML = '<div class="card">Failed to load patterns.</div>';
             }
         }
 
         async function loadPredictions() {
             try {
-                const response = await fetch(`${API_BASE_URL}/predictions`);
-                if (!response.ok) throw new Error('Analyzer predictions fetch failed');
-                const predictions = await response.json();
-
+                const predictions = await fetchJson(`${API_BASE_URL}/predictions`);
                 const grid = document.getElementById('predictions-grid');
                 grid.innerHTML = '';
                 if (!predictions.length) {
                     grid.innerHTML = '<div class="card">No predictions available yet.</div>';
                     return;
                 }
-
                 predictions.forEach(pred => {
                     const changeVal = Number(pred.predicted_change);
                     const dir = up(changeVal) ? 'positive' : 'negative';
@@ -320,10 +412,8 @@
                 <h3>${pred.item.replace(/_/g, ' ').toUpperCase()}</h3>
                 <div>Current: ${fmt(pred.current_price)}p</div>
                 <div>Predicted (6h): ${fmt(pred.predicted_price)}p</div>
-                <div class="change ${dir}">
-                  ${trendArrow} ${fmtPct(changeVal)}
-                </div>
-                <div style="font-size: 12px; margin-top: 10px;">Confidence: ${fmtPct((pred.confidence ?? 0) * 100, 0)}</div>`;
+                <div class="change ${dir}">${trendArrow} ${fmtPct(changeVal)}</div>
+                <div class="muted" style="margin-top: 8px;">Confidence: ${fmtPct((pred.confidence ?? 0) * 100, 0)}</div>`;
                     grid.appendChild(card);
                 });
             } catch (err) {
@@ -334,34 +424,25 @@
 
         async function loadMlPredictions() {
             try {
-                const resp = await fetch(`${API_BASE_URL}/ml-predictions?select=item,predicted_at,current_price,predicted_price,confidence&order=predicted_at.desc&limit=200`);
-                if (!resp.ok) throw new Error('ML predictions fetch failed');
-                const rows = await resp.json();
-
-                const latestByItem = new Map();
+                const rows = await fetchJson(`${API_BASE_URL}/ml-predictions?select=item,predicted_at,current_price,predicted_price,confidence&order=predicted_at.desc&limit=200`);
+                const latest = new Map();
                 for (const r of rows) {
-                    const prev = latestByItem.get(r.item);
+                    const prev = latest.get(r.item);
                     if (!prev || new Date(r.predicted_at) > new Date(prev.predicted_at)) {
-                        latestByItem.set(r.item, r);
+                        latest.set(r.item, r);
                     }
                 }
-                const preds = Array.from(latestByItem.values());
-
+                const preds = Array.from(latest.values());
                 preds.forEach(p => {
                     if (p.current_price != null && p.current_price !== 0 && p.predicted_price != null) {
                         p.predicted_change = ((p.predicted_price - p.current_price) / p.current_price) * 100;
-                    } else {
-                        p.predicted_change = null;
-                    }
+                    } else { p.predicted_change = null; }
                 });
-
                 preds.sort((a, b) => Math.abs(b.predicted_change ?? 0) - Math.abs(a.predicted_change ?? 0));
 
                 const grid = document.getElementById('ml-predictions-grid');
-                if (!preds.length) {
-                    grid.innerHTML = '<div class="card">No ML predictions yet.</div>';
-                    return;
-                }
+                grid.innerHTML = '';
+                if (!preds.length) { grid.innerHTML = '<div class="card">No ML predictions yet.</div>'; return; }
 
                 grid.innerHTML = preds.slice(0, 20).map(p => {
                     const itemName = p.item.replace(/_/g, ' ').toUpperCase();
@@ -372,17 +453,13 @@
                     return `
                 <div class="card prediction-card">
                   <h3>${itemName}</h3>
-                  <div>As of: ${since}</div>
+                  <div class="muted">As of: ${since}</div>
                   <div style="margin:8px 0">
                     <strong>Current:</strong> ${fmt(p.current_price)}p •
                     <strong>Predicted:</strong> ${fmt(p.predicted_price)}p
                   </div>
-                  <div class="change ${dir}">
-                    ${arrow} ${fmtPct(Math.abs(change), 2)}
-                  </div>
-                  <div style="font-size:12px; margin-top:8px;">
-                    Confidence: ${fmtPct((p.confidence ?? 0) * 100, 0)}
-                  </div>
+                  <div class="change ${dir}">${arrow} ${fmtPct(Math.abs(change), 2)}</div>
+                  <div class="muted" style="margin-top:8px;">Confidence: ${fmtPct((p.confidence ?? 0) * 100, 0)}</div>
                 </div>`;
                 }).join('');
             } catch (err) {
@@ -393,22 +470,18 @@
 
         async function loadTrackedItems() {
             try {
-                const resp = await fetch(`${API_BASE_URL}/tracked_items?select=item,score&active=eq.true&order=score.desc&limit=50`);
-                if (!resp.ok) throw new Error('Tracked items fetch failed');
-                const rows = await resp.json();
+                const rows = await fetchJson(`${API_BASE_URL}/tracked_items?select=item,score&active=eq.true&order=score.desc&limit=50`);
                 const grid = document.getElementById('tracked-items-grid');
-                if (!rows.length) {
-                    grid.innerHTML = '<div class="card">No tracked items yet.</div>';
-                    return;
-                }
+                grid.innerHTML = '';
+                if (!rows.length) { grid.innerHTML = '<div class="card">No tracked items yet.</div>'; return; }
                 grid.innerHTML = rows.map(r => `
               <div class="card">
                 <h3>${r.item.replace(/_/g, ' ').toUpperCase()}</h3>
-                <div style="font-size:12px;color:#94a3b8">Score: ${fmt(r.score, 3)}</div>
+                <div class="muted">Score: ${fmt(r.score, 3)}</div>
               </div>
             `).join('');
             } catch (e) {
-                console.error('Tracked items load error:', e);
+                console.error('loadTrackedItems error:', e);
                 document.getElementById('tracked-items-grid').innerHTML = '<div class="card">Failed to load tracked items.</div>';
             }
         }
@@ -416,34 +489,50 @@
         async function loadMlAccuracy() {
             try {
                 const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-                const resp = await fetch(`${API_BASE_URL}/predictions?select=accuracy,predicted_at&predicted_at=gte.${sinceIso}&accuracy=not.is.null&limit=1000`);
-                if (!resp.ok) throw new Error('Accuracy fetch failed');
-                const rows = await resp.json();
+                const rows = await fetchJson(`${API_BASE_URL}/predictions?select=accuracy,predicted_at&predicted_at=gte.${sinceIso}&accuracy=not.is.null&limit=1000`);
                 const accs = rows.map(r => Number(r.accuracy)).filter(x => isFinite(x));
                 const mean = accs.length ? (accs.reduce((a, b) => a + b, 0) / accs.length) : null;
-
                 const grid = document.getElementById('ml-accuracy-grid');
                 grid.innerHTML = `
               <div class="card">
                 <h3>Mean accuracy</h3>
                 <div style="font-size:28px;">${mean != null ? (mean * 100).toFixed(1) + '%' : '—'}</div>
-                <div style="font-size:12px;color:#94a3b8">n=${accs.length}</div>
-              </div>
-            `;
+                <div class="muted">n=${accs.length}</div>
+              </div>`;
             } catch (e) {
                 console.error('loadMlAccuracy error:', e);
                 document.getElementById('ml-accuracy-grid').innerHTML = '<div class="card">Failed to load ML accuracy.</div>';
             }
         }
 
-        // Safe JSON and HTML helpers
-        function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
-        function escapeHtml(str) {
-            return String(str).replace(/[&<>"'`=\/]/g, s => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;', '`': '&#x60;', '=': '&#x3D;'
-            }[s]));
+        async function loadSignalsDb() {
+            try {
+                const rows = await fetchJson(`${API_BASE_URL}/signals-db?limit=50`);
+                const grid = document.getElementById('signals-grid');
+                grid.innerHTML = '';
+                if (!rows.length) {
+                    grid.innerHTML = '<div class="card">No signals yet.</div>';
+                    return;
+                }
+                grid.innerHTML = rows.map(s => {
+                    const cls = (s.type || '').toLowerCase();
+                    const color = cls === 'buy' ? 'positive' : (cls === 'sell' ? 'negative' : '');
+                    const itemName = (s.item || '').replace(/_/g, ' ').toUpperCase();
+                    return `
+                <div class="card signal-card">
+                  <h3>${(s.type || '').toUpperCase()}: ${itemName}</h3>
+                  <div class="muted">Source: ${s.source || 'analyzer'} • Confidence: ${isFinite(s.confidence) ? (s.confidence * 100).toFixed(0) : '—'}%</div>
+                  <div class="change ${color}" style="margin-top:8px;">${s.reason ? escapeHtml(s.reason) : ''}</div>
+                  <div class="muted" style="margin-top:8px;">${new Date(s.created_at).toLocaleString()}</div>
+                </div>`;
+                }).join('');
+            } catch (e) {
+                console.error('loadSignalsDb error:', e);
+                document.getElementById('signals-grid').innerHTML = '<div class="card">Failed to load signals.</div>';
+            }
         }
 
+        // ---------- Chart ----------
         function updatePriceChart(priceHistory) {
             const ctx = document.getElementById('priceChart').getContext('2d');
             const datasets = Object.entries(priceHistory).slice(0, 5).map(([item, data], i) => ({
@@ -469,6 +558,7 @@
             });
         }
 
+        // Boot
         loadAllData();
         setInterval(loadAllData, 60000);
     </script>

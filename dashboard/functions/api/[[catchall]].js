@@ -1,92 +1,82 @@
-// This is your new secure API gateway.
-// It runs on the same domain as your dashboard, avoiding all CORS issues.
-
+// Cloudflare Pages Function: API Gateway
 export async function onRequest(context) {
-    // Get the original path the user requested (e.g., /api/signals)
-    const url = new URL(context.request.url);
+    const { request, env } = context;
+    const url = new URL(request.url);
     const apiPath = url.pathname.replace('/api/', '');
 
-    // Get secure environment variables from Cloudflare dashboard
-    const SUPABASE_URL = context.env.SUPABASE_URL;
-    const SUPABASE_KEY = context.env.SUPABASE_ANON_KEY;
+    const SUPABASE_URL = env.SUPABASE_URL;
+    const SUPABASE_KEY = env.SUPABASE_ANON_KEY;
     const ANALYZER_URL = 'https://gandalf-analyzer.psnedujime.workers.dev';
 
-    let targetUrl;
-    let requestOptions = {
-        headers: {
-            'User-Agent': 'Gandalf-API-Gateway/1.0',
-        }
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, apikey, Authorization'
     };
 
-    // Add this near the top of onRequest after apiPath is computed
-    if (apiPath.startsWith('ml-predictions')) {
-        const SUPABASE_URL = context.env.SUPABASE_URL;
-        const SUPABASE_KEY = context.env.SUPABASE_ANON_KEY;
-        const targetUrl = `${SUPABASE_URL}/rest/v1/predictions?order=predicted_at.desc&limit=100${url.search}`;
+    // Handle CORS preflight
+    if (request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    try {
+        // 1) ML predictions direct from Supabase
+        if (apiPath.startsWith('ml-predictions')) {
+            const targetUrl = `${SUPABASE_URL}/rest/v1/predictions?order=predicted_at.desc&limit=100${url.search}`;
+            const resp = await fetch(targetUrl, {
+                headers: {
+                    'User-Agent': 'Gandalf-API-Gateway/1.0',
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+        }
+
+        // 2) Analyzer-backed endpoints
+        if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
+            const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
+            const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+        }
+
+        // 3) Default: forward to Supabase REST
+        const targetUrl = `${SUPABASE_URL}/rest/v1/${apiPath}${url.search}`;
         const requestOptions = {
+            method: request.method,
             headers: {
                 'User-Agent': 'Gandalf-API-Gateway/1.0',
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
             }
         };
-        const resp = await fetch(targetUrl, requestOptions);
-        const newHeaders = new Headers(resp.headers);
-        newHeaders.set('Access-Control-Allow-Origin', '*');
-        newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization');
-        return new Response(resp.body, { status: resp.status, headers: newHeaders });
-    }
 
-    // Route the request to the correct destination
-    if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
-        // Forward to the Analyzer worker
-        targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
-    } else {
-        // Forward to Supabase
-        targetUrl = `${SUPABASE_URL}/rest/v1/${apiPath}${url.search}`;
-        requestOptions.headers['apikey'] = SUPABASE_KEY;
-        requestOptions.headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
-
-        // Pass through method and body for POST requests (like executing trades)
-        if (context.request.method === 'POST') {
-            requestOptions.method = 'POST';
-            requestOptions.headers['Content-Type'] = 'application/json';
-            requestOptions.headers['Prefer'] = 'return=minimal';
-            requestOptions.body = await context.request.text();
+        if (request.method === 'POST' || request.method === 'PATCH']) {
+            requestOptions.body = await request.text();
         }
-    }
 
-    try {
-        // Fetch the data from the target
-        const response = await fetch(targetUrl, requestOptions);
+        const resp = await fetch(targetUrl, requestOptions);
+        const headersCombined = { ...corsHeaders, ...Object.fromEntries(resp.headers) };
 
-        // Create a new response with CORS headers to avoid being blocked by browsers
-        const newHeaders = new Headers(response.headers);
-        newHeaders.set('Access-Control-Allow-Origin', '*');
-        newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, apikey, Authorization');
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Error fetching from ${targetUrl}: ${errorText}`);
-            return new Response(JSON.stringify({ error: `Upstream service error: ${response.status}` }), {
-                status: response.status,
-                headers: newHeaders
+        if (!resp.ok) {
+            const errorText = await resp.text();
+            console.error(`Upstream error ${resp.status}: ${errorText}`);
+            return new Response(JSON.stringify({ error: `Upstream service error: ${resp.status}` }), {
+                status: resp.status,
+                headers: { ...headersCombined, 'Content-Type': 'application/json' }
             });
         }
 
-        return new Response(response.body, {
-            status: response.status,
-            headers: newHeaders
-        });
+        return new Response(resp.body, { status: resp.status, headers: headersCombined });
 
     } catch (error) {
-        console.error(`Gateway fetch error: ${error.message}`);
+        console.error('Gateway fetch error:', error);
         return new Response(JSON.stringify({ error: 'Gateway internal error' }), {
             status: 500,
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
 }

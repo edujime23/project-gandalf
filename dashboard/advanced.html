@@ -2,8 +2,8 @@
 <html>
 <head>
     <title>Gandalf Market Intelligence</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
@@ -69,12 +69,12 @@
 
         .positive {
             background: #10b981;
-            color: white;
+            color: #fff;
         }
 
         .negative {
             background: #ef4444;
-            color: white;
+            color: #fff;
         }
 
         h1 {
@@ -121,25 +121,36 @@
             <h1>🧙‍♂️ Gandalf Market Intelligence <span class="status" id="status">Connecting...</span></h1>
         </div>
     </div>
+
     <div class="container">
         <h2>📊 Current Market Prices</h2>
         <div class="grid" id="prices-grid"></div>
+
         <h2>🔍 Discovered Patterns</h2>
         <div class="grid" id="patterns-grid"></div>
-        <h2>🔮 Price Predictions</h2>
+
+        <h2>🔮 Price Predictions (Analyzer)</h2>
         <div class="grid" id="predictions-grid"></div>
+
+        <h2>🤖 ML Predictions (trained models)</h2>
+        <div class="grid" id="ml-predictions-grid"></div>
+
         <h2>📈 Market Trends (Top 5 Items)</h2>
-        <div class="card">
-            <canvas id="priceChart"></canvas>
-        </div>
+        <div class="card"><canvas id="priceChart"></canvas></div>
     </div>
+
     <script>
         const API_BASE_URL = '/api';
         let priceChart = null;
 
         async function loadAllData() {
             try {
-                await Promise.all([loadPrices(), loadPatterns(), loadPredictions()]);
+                await Promise.all([
+                    loadPrices(),
+                    loadPatterns(),
+                    loadPredictions(),
+                    loadMlPredictions()
+                ]);
                 const statusEl = document.getElementById('status');
                 statusEl.textContent = 'Live';
                 statusEl.style.background = '#10b981';
@@ -156,13 +167,11 @@
             const data = await response.json();
             const latestPrices = {};
             const priceHistory = {};
-
             data.forEach(row => {
-                if (!latestPrices[row.item]) { latestPrices[row.item] = row; }
-                if (!priceHistory[row.item]) { priceHistory[row.item] = []; }
+                if (!latestPrices[row.item]) latestPrices[row.item] = row;
+                if (!priceHistory[row.item]) priceHistory[row.item] = [];
                 priceHistory[row.item].push({ x: new Date(row.timestamp), y: row.sell_median });
             });
-
             const grid = document.getElementById('prices-grid');
             grid.innerHTML = '';
             Object.values(latestPrices).forEach(itemData => {
@@ -174,7 +183,13 @@
                 if (oldData && itemData.sell_median && oldData.y) {
                     change = ((itemData.sell_median - oldData.y) / oldData.y * 100);
                 }
-                card.innerHTML = `<h3>${itemData.item.replace(/_/g, ' ').toUpperCase()}</h3><div class="price">${itemData.sell_median || 'N/A'}p</div><div><span>Buy: ${itemData.buy_median || 'N/A'}p</span> | <span>Spread: ${itemData.spread || 'N/A'}p</span></div><div class="change ${change >= 0 ? 'positive' : 'negative'}">${change >= 0 ? '↑' : '↓'} ${Math.abs(change).toFixed(1)}% (2h)</div>`;
+                card.innerHTML = `
+              <h3>${itemData.item.replace(/_/g, ' ').toUpperCase()}</h3>
+              <div class="price">${itemData.sell_median ?? 'N/A'}p</div>
+              <div><span>Buy: ${itemData.buy_median ?? 'N/A'}p</span> | <span>Spread: ${itemData.spread ?? 'N/A'}p</span></div>
+              <div class="change ${change >= 0 ? 'positive' : 'negative'}">
+                ${change >= 0 ? '↑' : '↓'} ${Math.abs(change).toFixed(1)}% (2h)
+              </div>`;
                 grid.appendChild(card);
             });
             updatePriceChart(priceHistory);
@@ -185,7 +200,7 @@
             const patterns = await response.json();
             const grid = document.getElementById('patterns-grid');
             grid.innerHTML = '';
-            if (patterns.length === 0) {
+            if (!patterns.length) {
                 grid.innerHTML = '<div class="card">No significant patterns detected in the last hour.</div>';
                 return;
             }
@@ -193,11 +208,20 @@
                 const card = document.createElement('div');
                 card.className = 'card pattern-card';
                 if (pattern.type === 'correlation') {
-                    card.innerHTML = `<h3>Correlation Found</h3><div class="correlation"><span>${pattern.item1.replace(/_/g, ' ')}</span><span class="arrow">↔️</span><span>${pattern.item2.replace(/_/g, ' ')}</span></div><div>Strength: ${(pattern.strength * 100).toFixed(0)}%</div>`;
+                    card.innerHTML = `<h3>Correlation Found</h3>
+                <div class="correlation"><span>${pattern.item1.replace(/_/g, ' ')}</span><span class="arrow">↔️</span><span>${pattern.item2.replace(/_/g, ' ')}</span></div>
+                <div>Strength: ${(pattern.strength * 100).toFixed(0)}%</div>`;
                 } else if (pattern.type === 'surge' || pattern.type === 'crash') {
-                    card.innerHTML = `<h3>${pattern.type === 'surge' ? '📈 Price Surge' : '📉 Price Crash'}</h3><div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div><div class="change ${pattern.type === 'surge' ? 'positive' : 'negative'}">${pattern.change}% change</div><div>From ${pattern.from}p to ${pattern.to}p</div>`;
+                    card.innerHTML = `<h3>${pattern.type === 'surge' ? '📈 Price Surge' : '📉 Price Crash'}</h3>
+                <div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div>
+                <div class="change ${pattern.type === 'surge' ? 'positive' : 'negative'}">${pattern.change}% change</div>
+                <div>From ${pattern.from}p to ${pattern.to}p</div>`;
                 } else if (pattern.type === 'golden_cross') {
-                    card.innerHTML = `<h3>🎯 Golden Cross Signal</h3><div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div><div>MA5: ${pattern.ma5.toFixed(1)}p</div><div>MA20: ${pattern.ma20.toFixed(1)}p</div><div class="positive">Bullish Signal</div>`;
+                    card.innerHTML = `<h3>🎯 Golden Cross Signal</h3>
+                <div>${pattern.item.replace(/_/g, ' ').toUpperCase()}</div>
+                <div>MA5: ${pattern.ma5.toFixed(1)}p</div>
+                <div>MA20: ${pattern.ma20.toFixed(1)}p</div>
+                <div class="positive">Bullish Signal</div>`;
                 }
                 grid.appendChild(card);
             });
@@ -208,31 +232,100 @@
             const predictions = await response.json();
             const grid = document.getElementById('predictions-grid');
             grid.innerHTML = '';
-            if (predictions.length === 0) {
+            if (!predictions.length) {
                 grid.innerHTML = '<div class="card">No predictions available yet.</div>';
                 return;
             }
             predictions.forEach(pred => {
                 const card = document.createElement('div');
                 card.className = 'card prediction-card';
-                card.innerHTML = `<h3>${pred.item.replace(/_/g, ' ').toUpperCase()}</h3><div>Current: ${pred.current_price}p</div><div>Predicted (6h): ${pred.predicted_price}p</div><div class="change ${pred.predicted_change >= 0 ? 'positive' : 'negative'}">${pred.trend === 'up' ? '📈' : '📉'} ${pred.predicted_change}%</div><div style="font-size: 12px; margin-top: 10px;">Confidence: ${(pred.confidence * 100).toFixed(0)}%</div>`;
+                card.innerHTML = `
+              <h3>${pred.item.replace(/_/g, ' ').toUpperCase()}</h3>
+              <div>Current: ${pred.current_price}p</div>
+              <div>Predicted (6h): ${pred.predicted_price}p</div>
+              <div class="change ${pred.predicted_change >= 0 ? 'positive' : 'negative'}">
+                ${pred.trend === 'up' ? '📈' : '📉'} ${pred.predicted_change}%</div>
+              <div style="font-size: 12px; margin-top: 10px;">Confidence: ${(pred.confidence * 100).toFixed(0)}%</div>`;
                 grid.appendChild(card);
             });
         }
 
+        async function loadMlPredictions() {
+            try {
+                const resp = await fetch(`${API_BASE_URL}/ml-predictions?select=item,predicted_at,current_price,predicted_price,confidence&order=predicted_at.desc&limit=200`);
+                if (!resp.ok) throw new Error('Failed to load ML predictions');
+                const rows = await resp.json();
+
+                // Latest per item
+                const latestByItem = new Map();
+                for (const r of rows) {
+                    const prev = latestByItem.get(r.item);
+                    if (!prev || new Date(r.predicted_at) > new Date(prev.predicted_at)) {
+                        latestByItem.set(r.item, r);
+                    }
+                }
+                const preds = Array.from(latestByItem.values());
+
+                // Compute change client-side
+                preds.forEach(p => {
+                    if (p.current_price != null && p.current_price !== 0 && p.predicted_price != null) {
+                        p.predicted_change = ((p.predicted_price - p.current_price) / p.current_price) * 100;
+                    } else {
+                        p.predicted_change = null;
+                    }
+                });
+
+                preds.sort((a, b) => Math.abs(b.predicted_change ?? 0) - Math.abs(a.predicted_change ?? 0));
+
+                const grid = document.getElementById('ml-predictions-grid');
+                if (!preds.length) {
+                    grid.innerHTML = '<div class="card">No ML predictions yet.</div>';
+                    return;
+                }
+
+                grid.innerHTML = preds.slice(0, 20).map(p => {
+                    const itemName = p.item.replace(/_/g, ' ').toUpperCase();
+                    const change = p.predicted_change ?? 0;
+                    const dir = change >= 0 ? 'positive' : 'negative';
+                    const arrow = change >= 0 ? '📈' : '📉';
+                    const since = new Date(p.predicted_at).toLocaleTimeString();
+                    return `
+                <div class="card prediction-card">
+                  <h3>${itemName}</h3>
+                  <div>As of: ${since}</div>
+                  <div style="margin:8px 0">
+                    <strong>Current:</strong> ${p.current_price ?? '—'}p •
+                    <strong>Predicted:</strong> ${p.predicted_price ?? '—'}p
+                  </div>
+                  <div class="change ${dir}">
+                    ${arrow} ${isFinite(change) ? Math.abs(change).toFixed(2) : '—'}%
+                  </div>
+                  <div style="font-size:12px; margin-top:8px;">
+                    Confidence: ${p.confidence != null ? (p.confidence * 100).toFixed(0) : '—'}%
+                  </div>
+                </div>`;
+                }).join('');
+            } catch (err) {
+                console.error('ML predictions load error:', err);
+                const grid = document.getElementById('ml-predictions-grid');
+                grid.innerHTML = '<div class="card">Failed to load ML predictions.</div>';
+            }
+        }
+
         function updatePriceChart(priceHistory) {
             const ctx = document.getElementById('priceChart').getContext('2d');
-            const datasets = Object.entries(priceHistory).slice(0, 5).map(([item, data], index) => ({
+            const datasets = Object.entries(priceHistory).slice(0, 5).map(([item, data], i) => ({
                 label: item.replace(/_/g, ' '),
                 data: data.filter(d => d.y != null).sort((a, b) => a.x - b.x),
-                borderColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index],
+                borderColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i],
                 backgroundColor: 'transparent',
                 tension: 0.1,
                 borderWidth: 2
             }));
-            if (priceChart) { priceChart.destroy(); }
+            if (priceChart) priceChart.destroy();
             priceChart = new Chart(ctx, {
-                type: 'line', data: { datasets },
+                type: 'line',
+                data: { datasets },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#cbd5e1' } } },
@@ -243,6 +336,7 @@
                 }
             });
         }
+
         loadAllData();
         setInterval(loadAllData, 60000);
     </script>

@@ -45,7 +45,7 @@ def fetch_recent(days=7, page_size=1000):
 def build_features(item_df):
     item_df = item_df.sort_values("timestamp").copy()
     if len(item_df) < 60:
-        return None, None, None
+        return None, None
 
     X = pd.DataFrame(index=item_df.index)
     price = item_df["sell_median"]
@@ -81,17 +81,10 @@ def build_features(item_df):
     # Last valid row for inference
     X = X.dropna()
     if X.empty:
-        return None, None, None
+        return None, None
 
     current_price = float(price.loc[X.index[-1]])
-    # Dynamic step size -> horizon minutes for +6 steps
-    ts = item_df.loc[X.index, "timestamp"]
-    if len(ts) >= 2:
-        step_minutes = max(1, np.median(np.diff(ts.values).astype("timedelta64[m]").astype(float)))
-    else:
-        step_minutes = 5
-    horizon_minutes = int(step_minutes * 6)
-    return X.iloc[-1], current_price, horizon_minutes
+    return X.iloc[-1], current_price
 
 def upsert_predictions(preds):
     if not preds:
@@ -118,7 +111,6 @@ def main():
     # Load feature columns (keeps training/inference aligned)
     with open("models/feature_importance.json", "r") as f:
         fi = json.load(f)
-    # Pick columns from any trained item (they all share the same set)
     ref_item = next(iter(fi))
     feature_cols = list(fi[ref_item].keys())
 
@@ -129,29 +121,22 @@ def main():
         model = joblib.load(pkl)
 
         item_df = df[df["item"] == item]
-        x_last, current_price, horizon_minutes = build_features(item_df)
+        x_last, current_price = build_features(item_df)
         if x_last is None:
             print(f"Skipping {item}: not enough data for features.")
             continue
 
-        # Align columns to training order
+        # Align columns to training order and keep names to avoid sklearn warning
         x_last = x_last.reindex(feature_cols).fillna(0.0)
-        y_pred = float(model.predict([x_last.values])[0])
-        change = None
-        conf = 0.7
-        if current_price and current_price != 0:
-            change = round((y_pred - current_price) / current_price * 100.0, 3)
+        X_pred = pd.DataFrame([x_last.values], columns=feature_cols)
+        y_pred = float(model.predict(X_pred)[0])
 
         preds.append({
             "item": item,
             "predicted_at": datetime.now(timezone.utc).isoformat(),
-            "horizon_minutes": horizon_minutes,
             "current_price": round(current_price, 3) if current_price is not None else None,
             "predicted_price": round(y_pred, 3),
-            "predicted_change": change,
-            "confidence": conf,
-            "model_name": os.path.basename(pkl),
-            "metadata": None
+            "confidence": 0.9
         })
 
     print(f"Upserting {len(preds)} predictions...")

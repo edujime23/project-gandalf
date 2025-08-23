@@ -54,7 +54,7 @@ export async function onRequest(context) {
             }
         };
 
-        if (request.method === 'POST' || request.method === 'PATCH']) {
+        if (request.method === 'POST' || request.method === 'PATCH') {
             requestOptions.body = await request.text();
         }
 

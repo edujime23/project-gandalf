@@ -48,7 +48,7 @@ export async function onRequest(context) {
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
         }
 
-        // 3) Analyzer-backed endpoints (cache in KV)
+        // 3) Analyzer-backed endpoints (KV cache)
         if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
             const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });

@@ -158,9 +158,9 @@
             try {
                 await Promise.all([
                     loadPrices(),
-                    loadPatterns(),        // DB with fallback window
-                    loadPredictions(),     // analyzer KV
-                    loadMlPredictions(),   // DB
+                    loadPatterns(),
+                    loadPredictions(),
+                    loadMlPredictions(),
                     loadTrackedItems(),
                     loadMlAccuracy()
                 ]);
@@ -293,7 +293,7 @@
                 });
             } catch (err) {
                 console.error('loadPatterns error:', err);
-                document.getElementById('patterns-grid').innerHTML = '<div class="card">Failed to load patterns.</div>';
+                document.getElementById('patterns-grid').innerHTML = '<div class="card' > Failed to load patterns.</div > ";
             }
         }
 

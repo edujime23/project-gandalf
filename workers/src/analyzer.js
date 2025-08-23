@@ -1,4 +1,4 @@
-﻿// analyzer.js - v1.3 - Persist signals to DB + service role support
+﻿// analyzer.js - v1.4 - Persist signals/patterns/predictions with service role + error logging
 
 export default {
     async scheduled(event, env, ctx) {
@@ -46,7 +46,7 @@ export default {
     }
 };
 
-// Fetch recent market data
+// ---------- Helpers ----------
 async function fetchRecentData(env) {
     const resp = await fetch(
         `${env.SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=2500`,
@@ -56,7 +56,22 @@ async function fetchRecentData(env) {
     return await resp.json();
 }
 
-// Store results (KV + DB + Discord)
+async function postJSON(url, key, payload, label) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Prefer': 'return=minimal,resolution=merge-duplicates'
+    };
+    const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    if (!resp.ok) {
+        const txt = await resp.text();
+        console.error(`Supabase write failed [${label}] ${resp.status}: ${txt}`);
+    } else {
+        console.log(`Supabase write ok [${label}] count=${Array.isArray(payload) ? payload.length : 1}`);
+    }
+}
+
 async function storeAnalysisResults(env, patterns, predictions, data) {
     const signals = generateTradingSignals(patterns, data);
 
@@ -65,7 +80,7 @@ async function storeAnalysisResults(env, patterns, predictions, data) {
     await env.PATTERN_CACHE.put('latest_predictions', JSON.stringify(predictions), { expirationTtl: 3600 });
     await env.PATTERN_CACHE.put('latest_signals', JSON.stringify(signals), { expirationTtl: 3600 });
 
-    // Discord alerts (threshold)
+    // Discord alerts
     for (const s of signals) {
         if (s.confidence > 0.8) {
             const color = s.type === 'BUY' ? 3066993 : (s.type === 'SELL' ? 15158332 : 16776960);
@@ -84,12 +99,6 @@ async function storeAnalysisResults(env, patterns, predictions, data) {
 
     // DB writes using service key if present
     const key = env.SUPABASE_SERVICE_ROLE || env.SUPABASE_ANON_KEY;
-    const headers = {
-        'Content-Type': 'application/json',
-        'apikey': key,
-        'Authorization': `Bearer ${key}`,
-        'Prefer': 'return=minimal'
-    };
 
     // 1) Patterns
     if (patterns.length) {
@@ -98,9 +107,7 @@ async function storeAnalysisResults(env, patterns, predictions, data) {
             pattern_data: p,
             confidence: p.confidence ?? null
         }));
-        await fetch(`${env.SUPABASE_URL}/rest/v1/discovered_patterns`, {
-            method: 'POST', headers, body: JSON.stringify(payload)
-        });
+        await postJSON(`${env.SUPABASE_URL}/rest/v1/discovered_patterns`, key, payload, 'patterns');
     }
 
     // 2) Predictions
@@ -112,9 +119,7 @@ async function storeAnalysisResults(env, patterns, predictions, data) {
             predicted_price: p.predicted_price,
             confidence: p.confidence ?? null
         }));
-        await fetch(`${env.SUPABASE_URL}/rest/v1/predictions`, {
-            method: 'POST', headers, body: JSON.stringify(payload)
-        });
+        await postJSON(`${env.SUPABASE_URL}/rest/v1/predictions`, key, payload, 'predictions');
     }
 
     // 3) Signals
@@ -132,9 +137,7 @@ async function storeAnalysisResults(env, patterns, predictions, data) {
                 profit_pct: s.profit_pct ?? null
             }
         }));
-        await fetch(`${env.SUPABASE_URL}/rest/v1/signals`, {
-            method: 'POST', headers, body: JSON.stringify(payload)
-        });
+        await postJSON(`${env.SUPABASE_URL}/rest/v1/signals`, key, payload, 'signals');
     }
 }
 
@@ -159,7 +162,7 @@ async function sendDiscordAlert(env, alert) {
     }
 }
 
-// ---------- Analysis helpers ----------
+// ---- Analysis helpers (unchanged core) ----
 function movingAverage(arr) { if (!arr.length) return 0; return arr.reduce((a, b) => a + b, 0) / arr.length; }
 
 function calculateCorrelation(set1, set2) {

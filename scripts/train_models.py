@@ -30,17 +30,17 @@ class ModelTrainer:
         if not data:
             print("No data available for training.")
             return None
-            
+        
         df = pd.DataFrame(data)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        
-        # --- CRITICAL FIX IS HERE ---
-        # Create a timezone-aware cutoff time in UTC
+    
+        # --- THIS IS THE FIX ---
+        # Tell pandas to be flexible with the ISO timestamp format
+        df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+    
+        # The rest of your code is correct and doesn't need to change
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        
-        # Now the comparison will work because both are timezone-aware
         df = df[df['timestamp'] > cutoff]
-        
+    
         return df
 
     def create_features(self, df, item):

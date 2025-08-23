@@ -1,19 +1,16 @@
-﻿// FINAL & FIXED analyzer.js - v1.1
+﻿// FINAL & FIXED analyzer.js - v1.2 - Correct Health Check & Saves All Data
 export default {
     async scheduled(event, env, ctx) {
         console.log('Running full analysis cycle...');
         try {
             const data = await fetchRecentData(env);
-            if (!data || data.length < 50) { // Need some data to work with
+            if (!data || data.length < 50) {
                 console.log("Not enough data to run analysis. Skipping cycle.");
                 return;
             }
             const patterns = findPatterns(data);
             const predictions = generatePredictions(data);
-
-            // This now stores everything correctly
             await storeAnalysisResults(env, patterns, predictions, data);
-
             console.log(`Analysis complete. Found ${patterns.length} patterns and ${predictions.length} predictions.`);
         } catch (error) {
             console.error('Analysis cycle error:', error);
@@ -22,28 +19,33 @@ export default {
 
     async fetch(request, env) {
         const url = new URL(request.url);
-        // CRITICAL FIX FOR DASHBOARD: Add CORS headers to all API responses
         const headers = {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
+            'Access-Control-Allow-Origin': '*' // Allows dashboard to call it
         };
 
-        if (url.pathname === '/api/patterns') {
-            const patterns = await env.PATTERN_CACHE.get('latest_patterns');
-            return new Response(patterns || '[]', { headers });
+        // Handle specific API routes
+        if (url.pathname.startsWith('/api/')) {
+            if (url.pathname === '/api/patterns') {
+                const patterns = await env.PATTERN_CACHE.get('latest_patterns');
+                return new Response(patterns || '[]', { headers });
+            }
+            if (url.pathname === '/api/predictions') {
+                const predictions = await env.PATTERN_CACHE.get('latest_predictions');
+                return new Response(predictions || '[]', { headers });
+            }
+            if (url.pathname === '/api/signals') {
+                const signals = await env.PATTERN_CACHE.get('latest_signals');
+                return new Response(signals || '[]', { headers });
+            }
         }
 
-        if (url.pathname === '/api/predictions') {
-            const predictions = await env.PATTERN_CACHE.get('latest_predictions');
-            return new Response(predictions || '[]', { headers });
-        }
-
-        if (url.pathname === '/api/signals') {
-            const signals = await env.PATTERN_CACHE.get('latest_signals');
-            return new Response(signals || '[]', { headers });
-        }
-
-        return new Response('Gandalf Analyzer API is online.', { headers });
+        // The root path acts as a health check and returns valid JSON
+        const lastRun = await env.PATTERN_CACHE.get('latest_signals');
+        return new Response(JSON.stringify({
+            status: 'healthy',
+            last_analysis_cached: !!lastRun
+        }), { headers });
     }
 };
 
@@ -131,7 +133,7 @@ async function sendDiscordAlert(env, alert) {
 }
 
 // =================================================================
-// ==           UNCHANGED ANALYSIS HELPER FUNCTIONS               ==
+// ==           ANALYSIS HELPER FUNCTIONS (No changes needed)       ==
 // =================================================================
 function calculateVolatility(prices) { if (prices.length < 2) return 0; const returns = []; for (let i = 1; i < prices.length; i++) { if (prices[i - 1] !== 0) returns.push((prices[i] - prices[i - 1]) / prices[i - 1]); } if (returns.length === 0) return 0; const avg = returns.reduce((a, b) => a + b, 0) / returns.length; if (isNaN(avg)) return 0; const variance = returns.reduce((sum, r) => sum + Math.pow(r - avg, 2), 0) / returns.length; return Math.sqrt(variance) * 100; }
 function movingAverage(prices) { if (prices.length === 0) return 0; return prices.reduce((a, b) => a + b, 0) / prices.length; }

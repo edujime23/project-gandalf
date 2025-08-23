@@ -7,39 +7,42 @@ from sklearn.model_selection import train_test_split
 import joblib
 import requests
 from datetime import datetime, timedelta
+# NEW: Import timezone
+from datetime import timezone
 
-SUPABASE_URL = os.environ['SUPABASE_URL']
-SUPABASE_KEY = os.environ['SUPABASE_KEY']
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 class ModelTrainer:
     def __init__(self):
         self.models = {}
         self.feature_importance = {}
-        
+
     def fetch_training_data(self, days=30):
         """Fetch training data from Supabase"""
         headers = {'apikey': SUPABASE_KEY}
-        
         response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=20000",
+            f"{SUPABASE_URL}/rest/v1/market_data?order=timestamp.desc&limit=25000",
             headers=headers
         )
-        
+        response.raise_for_status() # Will error if request fails
         data = response.json()
-        df = pd.DataFrame(data)
-        
-        if len(df) == 0:
-            print("No data available for training")
+        if not data:
+            print("No data available for training.")
             return None
             
+        df = pd.DataFrame(data)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         
-        # Filter to last N days
-        cutoff = datetime.now() - timedelta(days=days)
+        # --- CRITICAL FIX IS HERE ---
+        # Create a timezone-aware cutoff time in UTC
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        # Now the comparison will work because both are timezone-aware
         df = df[df['timestamp'] > cutoff]
         
         return df
-    
+
     def create_features(self, df, item):
         """Create features for a specific item"""
         item_df = df[df['item'] == item].copy()
@@ -48,121 +51,92 @@ class ModelTrainer:
         if len(item_df) < 100:
             return None, None
             
-        # Features
         features = pd.DataFrame(index=item_df.index)
-        
-        # Time features
         features['hour'] = item_df['timestamp'].dt.hour
         features['day_of_week'] = item_df['timestamp'].dt.dayofweek
         features['day_of_month'] = item_df['timestamp'].dt.day
         
-        # Price features
         features['price_ma_6'] = item_df['sell_median'].rolling(6).mean()
         features['price_ma_24'] = item_df['sell_median'].rolling(24).mean()
         features['price_std_24'] = item_df['sell_median'].rolling(24).std()
         features['price_change_6h'] = item_df['sell_median'].pct_change(6)
         features['price_change_24h'] = item_df['sell_median'].pct_change(24)
         
-        # Volume features
-        features['volume'] = item_df['sell_orders'] + item_df['buy_orders']
+        features['volume'] = item_df['sell_orders'].fillna(0) + item_df['buy_orders'].fillna(0)
         features['volume_ma_24'] = features['volume'].rolling(24).mean()
-        features['volume_ratio'] = features['volume'] / features['volume_ma_24']
+        features['volume_ratio'] = features['volume'] / (features['volume_ma_24'] + 1) # Add 1 to avoid division by zero
         
-        # Spread features
         features['spread'] = item_df['spread']
         features['spread_ma'] = features['spread'].rolling(24).mean()
-        features['spread_ratio'] = features['spread'] / item_df['sell_median']
+        features['spread_ratio'] = features['spread'] / (item_df['sell_median'] + 1)
         
-        # Target: next 6 hour price
         target = item_df['sell_median'].shift(-6)
         
-        # Drop NaN
-        valid_idx = features.dropna().index
-        valid_idx = valid_idx.intersection(target.dropna().index)
+        combined = pd.concat([features, target.rename('future_price')], axis=1)
+        combined = combined.dropna()
         
-        if len(valid_idx) < 50:
+        if len(combined) < 50:
             return None, None
             
-        return features.loc[valid_idx], target.loc[valid_idx]
+        X = combined.drop(columns=['future_price'])
+        y = combined['future_price']
+            
+        return X, y
     
     def train_item_model(self, df, item):
         """Train model for a specific item"""
         X, y = self.create_features(df, item)
-        
-        if X is None:
+        if X is None or y is None:
+            print(f"Skipping {item} due to insufficient data after feature creation.")
             return None
             
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
-        
-        # Train model
-        model = RandomForestRegressor(
-            n_estimators=100,
-            max_depth=10,
-            min_samples_split=5,
-            random_state=42,
-            n_jobs=-1
-        )
-        
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_split=5, random_state=42, n_jobs=-1)
         model.fit(X_train, y_train)
         
-        # Evaluate
         train_score = model.score(X_train, y_train)
         test_score = model.score(X_test, y_test)
         
         print(f"{item}: Train R2={train_score:.3f}, Test R2={test_score:.3f}")
         
-        # Feature importance
-        self.feature_importance[item] = dict(zip(
-            X.columns, 
-            model.feature_importances_
-        ))
-        
+        self.feature_importance[item] = dict(zip(X.columns, model.feature_importances_))
         return model
     
     def train_all_models(self):
         """Train models for all items"""
         print("Fetching training data...")
         df = self.fetch_training_data(days=30)
-        
         if df is None:
             return
             
-        # Get items with sufficient data
         item_counts = df['item'].value_counts()
         items_to_train = item_counts[item_counts > 200].index.tolist()
+        print(f"Found {len(items_to_train)} items with enough data for training...")
         
-        print(f"Training models for {len(items_to_train)} items...")
-        
-        for item in items_to_train[:10]:  # Limit to 10 for GitHub Actions
+        for item in items_to_train[:10]:
             print(f"\nTraining {item}...")
             model = self.train_item_model(df, item)
-            
             if model is not None:
                 self.models[item] = model
         
-        # Save models
+        if not self.models:
+            print("No models were successfully trained.")
+            return
+
         os.makedirs('models', exist_ok=True)
-        
         for item, model in self.models.items():
             joblib.dump(model, f'models/{item}_model.pkl')
         
-        # Save feature importance
         with open('models/feature_importance.json', 'w') as f:
             json.dump(self.feature_importance, f, indent=2)
+        print(f"\nSaved {len(self.models)} models to /models directory.")
         
-        print(f"\nSaved {len(self.models)} models")
-        
-        # Create model metadata
         metadata = {
-            'trained_at': datetime.now().isoformat(),
+            'trained_at': datetime.now(timezone.utc).isoformat(),
             'items': list(self.models.keys()),
             'training_days': 30,
             'model_type': 'RandomForestRegressor'
         }
-        
         with open('models/metadata.json', 'w') as f:
             json.dump(metadata, f, indent=2)
 

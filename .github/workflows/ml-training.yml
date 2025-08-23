@@ -32,7 +32,7 @@ jobs:
         python scripts/train_models.py
     
     - name: 5. Upload model artifacts
-      uses: actions/upload-artifact@v4 # FIXED
+      uses: actions/upload-artifact@v4
       with:
         name: ml-models-${{ github.run_id }}
         path: models/

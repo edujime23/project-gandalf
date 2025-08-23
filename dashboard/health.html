@@ -130,22 +130,26 @@
             }
         }
 
+        // In health.html
         async function loadMetrics() {
             try {
-                // To get the total count, we make a HEAD request and read the Content-Range header
-                const dpResponse = await fetch(`${API_BASE_URL}/market_data?select=count`, { method: 'HEAD' });
-                const dpRange = dpResponse.headers.get('content-range');
-                document.getElementById('data-points').textContent = dpRange ? dpRange.split('/')[1] : 'N/A';
+                // Use the new RPC function to get counts
+                const metricsResponse = await fetch(`${API_BASE_URL}/rpc/get_system_metrics`, { method: 'POST' });
+                if (!metricsResponse.ok) throw new Error('Failed to fetch system metrics');
+                const metrics = await metricsResponse.json();
 
-                const pResponse = await fetch(`${API_BASE_URL}/discovered_patterns?select=count`, { method: 'HEAD' });
-                const pRange = pResponse.headers.get('content-range');
-                document.getElementById('patterns-found').textContent = pRange ? pRange.split('/')[1] : '0';
+                document.getElementById('data-points').textContent = metrics.market_data_total.toLocaleString() || '0';
+                document.getElementById('patterns-found').textContent = metrics.patterns_total.toLocaleString() || '0';
 
+                // This part for active signals is fine as it hits the analyzer cache
                 const sigResponse = await fetch(`${API_BASE_URL}/signals`);
                 const signals = await sigResponse.json();
                 document.getElementById('active-signals').textContent = signals.length;
+
             } catch (error) {
                 console.error('Error loading metrics:', error);
+                document.getElementById('data-points').textContent = 'Error';
+                document.getElementById('patterns-found').textContent = 'Error';
             }
         }
 

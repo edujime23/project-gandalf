@@ -10,7 +10,7 @@ export async function onRequest(context) {
 
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS, HEAD',
         'Access-Control-Allow-Headers': 'Content-Type, apikey, Authorization'
     };
 
@@ -34,14 +34,28 @@ export async function onRequest(context) {
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
         }
 
-        // 2) Analyzer-backed endpoints
+        // 2) Signals from DB (persisted)
+        if (apiPath.startsWith('signals-db')) {
+            const targetUrl = `${SUPABASE_URL}/rest/v1/signals?order=created_at.desc&limit=100${url.search}`;
+            const resp = await fetch(targetUrl, {
+                headers: {
+                    'User-Agent': 'Gandalf-API-Gateway/1.0',
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+        }
+
+        // 3) Analyzer-backed endpoints (cache in KV)
         if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
             const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
         }
 
-        // 3) Default: forward to Supabase REST
+        // 4) Default: forward to Supabase REST
         const targetUrl = `${SUPABASE_URL}/rest/v1/${apiPath}${url.search}`;
         const requestOptions = {
             method: request.method,

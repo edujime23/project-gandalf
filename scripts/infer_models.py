@@ -90,12 +90,13 @@ def upsert_predictions(preds):
     if not preds:
         print("No predictions to upsert.")
         return
-    url = f"{SUPABASE_URL}/rest/v1/predictions"
+    url = f"{SUPABASE_URL}/rest/v1/predictions?on_conflict=item,predicted_at"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "return=minimal",
+        # merge-duplicates = UPSERT, return=minimal keeps payload small
+        "Prefer": "return=minimal,resolution=merge-duplicates",
     }
     r = requests.post(url, headers=headers, data=json.dumps(preds), timeout=30)
     if not r.ok:

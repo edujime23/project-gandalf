@@ -158,9 +158,9 @@
             try {
                 await Promise.all([
                     loadPrices(),
-                    loadPatterns(),        // now from Supabase discovered_patterns (last 1h)
-                    loadPredictions(),     // analyzer (KV)
-                    loadMlPredictions(),   // ML (DB)
+                    loadPatterns(),        // DB with fallback window
+                    loadPredictions(),     // analyzer KV
+                    loadMlPredictions(),   // DB
                     loadTrackedItems(),
                     loadMlAccuracy()
                 ]);
@@ -217,28 +217,42 @@
             }
         }
 
-        // UPDATED: load patterns from Supabase discovered_patterns (last 1 hour)
+        // Patterns with fallback window (1h -> 3h -> 6h)
         async function loadPatterns() {
             try {
-                const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // last 1h
-                const url = `${API_BASE_URL}/discovered_patterns?select=pattern_type,pattern_data,confidence,discovered_at&discovered_at=gte.${sinceIso}&order=discovered_at.desc&limit=100`;
-                const resp = await fetch(url);
-                if (!resp.ok) throw new Error('Patterns (DB) fetch failed');
-                const rows = await resp.json();
-
                 const grid = document.getElementById('patterns-grid');
+                const windows = [1, 3, 6]; // hours
+                let rows = [];
+                let usedWindow = null;
+
+                for (const h of windows) {
+                    const sinceIso = new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
+                    const url = `${API_BASE_URL}/discovered_patterns?select=pattern_type,pattern_data,confidence,discovered_at&discovered_at=gte.${sinceIso}&order=discovered_at.desc&limit=100`;
+                    const resp = await fetch(url);
+                    if (resp.ok) {
+                        const arr = await resp.json();
+                        if (arr.length) { rows = arr; usedWindow = h; break; }
+                    }
+                }
+
                 grid.innerHTML = '';
                 if (!rows.length) {
-                    grid.innerHTML = '<div class="card">No significant patterns detected in the last hour.</div>';
+                    grid.innerHTML = '<div class="card">No significant patterns detected recently.</div>';
                     return;
+                }
+
+                if (usedWindow && usedWindow > 1) {
+                    const note = document.createElement('div');
+                    note.className = 'card';
+                    note.style.fontSize = '12px';
+                    note.style.color = '#94a3b8';
+                    note.textContent = `Showing last ${usedWindow}h (no patterns in the last hour).`;
+                    grid.appendChild(note);
                 }
 
                 rows.forEach(row => {
                     const type = row.pattern_type;
-                    const data = (typeof row.pattern_data === 'string')
-                        ? (safeParse(row.pattern_data) ?? {})
-                        : (row.pattern_data ?? {});
-
+                    const data = (typeof row.pattern_data === 'string') ? (safeParse(row.pattern_data) ?? {}) : (row.pattern_data ?? {});
                     const conf = row.confidence ?? 0;
                     const card = document.createElement('div');
                     card.className = 'card pattern-card';
@@ -253,7 +267,6 @@
                   <div>Strength: ${fmtPct(str * 100, 0)} • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
                     } else if (type === 'surge' || type === 'crash') {
                         const name = (data.item || '').replace(/_/g, ' ').toUpperCase();
-                        // compute change if missing
                         let ch = data.change;
                         if ((ch === undefined || ch === null) && data.from != null && data.to != null && data.from !== 0) {
                             ch = ((data.to - data.from) / data.from) * 100;
@@ -271,7 +284,6 @@
                   <div>MA5: ${fmt(data.ma5, 1)}p • MA20: ${fmt(data.ma20, 1)}p</div>
                   <div class="positive">Bullish Signal • Confidence: ${fmtPct(conf * 100, 0)}</div>`;
                     } else {
-                        // Fallback for unknown pattern types
                         card.innerHTML = `
                   <h3>Pattern: ${type}</h3>
                   <div style="font-size:12px;color:#94a3b8">${escapeHtml(JSON.stringify(data))}</div>`;
@@ -326,7 +338,6 @@
                 if (!resp.ok) throw new Error('ML predictions fetch failed');
                 const rows = await resp.json();
 
-                // Latest per item
                 const latestByItem = new Map();
                 for (const r of rows) {
                     const prev = latestByItem.get(r.item);

@@ -22,7 +22,7 @@ class BacktestEngine:
         url = f"{SUPABASE_URL}/rest/v1/market_data"
         headers = {
             'apikey': SUPABASE_KEY,
-            'Authorization': f'Bearer {SUPABASE_KEY}'
+            'Authorization': f'Bearer {SUPABASE_KEY}`
         }
         params = {
             'select': '*',
@@ -51,7 +51,14 @@ class BacktestEngine:
             offset += 1000
             
         df = pd.DataFrame(all_data)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # FIXED: Use format='ISO8601' to handle various timestamp formats
+        df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+        
+        # Convert numeric columns
+        numeric_cols = ['sell_median', 'buy_median', 'spread', 'sell_orders', 'buy_orders']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
         
         return df.sort_values('timestamp')
         
@@ -123,7 +130,7 @@ class BacktestEngine:
         delta = prices.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
+        rs = gain / (loss + 1e-10)  # Avoid division by zero
         rsi = 100 - (100 / (1 + rs))
         return rsi
         
@@ -167,7 +174,7 @@ class BacktestEngine:
             position_size = min(self.capital * 0.1, 1000)  # Max 10% per trade
             
             if self.capital >= position_size:
-                quantity = int(position_size / signal['price'])
+                quantity = int(position_size / signal['price']) if signal['price'] > 0 else 0
                 
                 if quantity > 0:
                     cost = quantity * signal['price']
@@ -215,7 +222,7 @@ class BacktestEngine:
                 'quantity': position['quantity'],
                 'price': signal['price'],
                 'profit': profit,
-                'profit_pct': (profit / cost) * 100,
+                'profit_pct': (profit / cost) * 100 if cost > 0 else 0,
                 'reason': signal['reason']
             })
             
@@ -229,7 +236,8 @@ class BacktestEngine:
             item_data = current_data[current_data['item'] == item]
             if not item_data.empty:
                 current_price = item_data.iloc[0]['sell_median']
-                equity += position['quantity'] * current_price
+                if pd.notna(current_price):
+                    equity += position['quantity'] * current_price
                 
         return equity
         
@@ -248,7 +256,10 @@ class BacktestEngine:
         total_return = (final_equity - self.initial_capital) / self.initial_capital
         
         # Sharpe ratio (assuming 0% risk-free rate)
-        sharpe = returns.mean() / returns.std() * np.sqrt(252) if len(returns) > 0 else 0
+        if len(returns) > 0 and returns.std() > 0:
+            sharpe = returns.mean() / returns.std() * np.sqrt(252)
+        else:
+            sharpe = 0
         
         # Max drawdown
         cumulative = (1 + returns).cumprod()
@@ -287,8 +298,8 @@ class BacktestEngine:
         # Prepare data for database
         result = {
             'strategy_name': strategy_name,
-            'start_date': self.equity_curve[0]['timestamp'].date().isoformat(),
-            'end_date': self.equity_curve[-1]['timestamp'].date().isoformat(),
+            'start_date': self.equity_curve[0]['timestamp'].date().isoformat() if self.equity_curve else datetime.now().date().isoformat(),
+            'end_date': self.equity_curve[-1]['timestamp'].date().isoformat() if self.equity_curve else datetime.now().date().isoformat(),
             'initial_capital': metrics['initial_capital'],
             'final_capital': metrics['final_capital'],
             'total_return': metrics['total_return'],
@@ -308,7 +319,8 @@ class BacktestEngine:
         headers = {
             'apikey': SUPABASE_KEY,
             'Authorization': f'Bearer {SUPABASE_KEY}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
         }
         
         resp = requests.post(
@@ -320,7 +332,7 @@ class BacktestEngine:
         if resp.ok:
             print("Backtest results saved to database")
         else:
-            print(f"Failed to save results: {resp.status_code}")
+            print(f"Failed to save results: {resp.status_code} - {resp.text}")
             
         return metrics
 
@@ -332,12 +344,21 @@ def main():
     # Fetch historical data
     print("Fetching historical data...")
     data = engine.fetch_historical_data(days=30)
+    
+    if data.empty:
+        print("No historical data available")
+        return
+        
     print(f"Loaded {len(data)} data points")
     
     # Generate signals
     print("Generating trading signals...")
     signals = engine.generate_signals(data)
     print(f"Generated {len(signals)} signals")
+    
+    if signals.empty:
+        print("No trading signals generated")
+        return
     
     # Run backtest
     print("Running backtest...")

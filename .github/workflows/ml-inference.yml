@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout repo (models are committed here)
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -27,9 +27,9 @@ jobs:
         run: |
           pip install pandas numpy scikit-learn requests joblib
 
-      - name: Run inference
+      - name: Run unified inference  # CHANGED
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          python scripts/infer_models.py
+          python scripts/infer_unified.py  # CHANGED

@@ -1,5 +1,4 @@
-﻿# FINAL & FIXED ml-training.yml
-name: ML Model Training
+﻿name: ML Model Training
 
 on:
   schedule:
@@ -24,12 +23,12 @@ jobs:
       run: |
         pip install pandas numpy scikit-learn requests joblib
     
-    - name: 4. Train ML models
+    - name: 4. Train Unified ML Model  # CHANGED
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: |
-        python scripts/train_models.py
+        python scripts/train_unified_model.py  # CHANGED
     
     - name: 5. Upload model artifacts
       uses: actions/upload-artifact@v4
@@ -38,16 +37,14 @@ jobs:
         path: models/
         retention-days: 30
     
-    - name: 6. Commit models (Optional)
+    - name: 6. Commit models
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        # Only try to add, commit, and push if the models directory exists
         if [ -d "models" ]; then
           git add models/
-          # Only commit if there are staged changes
           if ! git diff --staged --quiet; then
-            git commit -m "chore: Update ML models [skip ci]"
+            git commit -m "chore: Update unified ML model [skip ci]"  # CHANGED
             git push
           else
             echo "No changes to commit."

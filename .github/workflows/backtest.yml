@@ -26,7 +26,7 @@ jobs:
     - name: Run Backtest
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }} 
       run: |
         python scripts/backtest_strategy.py
     

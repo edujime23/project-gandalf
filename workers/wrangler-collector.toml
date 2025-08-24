@@ -1,9 +1,10 @@
 name = "gandalf-collector"
 main = "src/collector.js"
 compatibility_date = "2024-01-01"
+account_id = "19d25279bc9bed348875d2f840c48588"
 
 [triggers]
-crons = ["*/5 * * * *"]  # Every 5 minutes
+crons = ["*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "MARKET_CACHE"

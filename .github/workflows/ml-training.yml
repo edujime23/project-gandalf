@@ -2,62 +2,41 @@
 
 on:
   schedule:
-    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM
+    - cron: '0 2 * * 0'  # Weekly Sunday 02:00 UTC
   workflow_dispatch:
 
 jobs:
   train-models:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
     steps:
-    - name: 1. Checkout Repository
-      uses: actions/checkout@v4
-    
-    - name: 2. Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    
-    - name: 3. Install Dependencies
-      run: |
-        pip install pandas numpy scikit-learn requests joblib
-    
-    - name: 4. Train Unified ML Model  # CHANGED
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      run: |
-        python scripts/train_unified_model.py  # CHANGED
-    
-    - name: 5. Upload model artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ml-models-${{ github.run_id }}
-        path: models/
-        retention-days: 30
-    
-    - name: 6. Commit models
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        if [ -d "models" ]; then
-          git add models/
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: Update unified ML model [skip ci]"  # CHANGED
-            git push
-          else
-            echo "No changes to commit."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Install deps
+        run: |
+          pip install pandas==2.3.2 numpy==2.2.6 scikit-learn==1.5.2 requests==2.32.5 joblib==1.4.2
+      - name: Train unified model
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: python scripts/train_unified_model.py
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-models-${{ github.run_id }}
+          path: models/
+          retention-days: 30
+      - name: Commit models (optional)
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          if [ -d "models" ]; then
+            git add models/
+            if ! git diff --staged --quiet; then
+              git commit -m "chore: update unified ML model [skip ci]"
+              git push
+            else
+              echo "No changes to commit."
+            fi
           fi
-        else
-          echo "Models directory not found, skipping commit."
-        fi
-
-    - name: Notify on Failure
-      if: failure()
-      env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-      run: |
-        curl -H "Content-Type: application/json" \
-        -d "{\"content\": \"**GitHub Action Failed!**\n**Workflow:** ${{ github.workflow }}\n**Repo:** ${{ github.repository }}\n**Link:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-        $DISCORD_WEBHOOK

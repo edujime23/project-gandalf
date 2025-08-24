@@ -1,67 +1,53 @@
+#!/usr/bin/env python
 import os
 import json
 import requests
 from datetime import datetime
 
-SUPABASE_URL = os.environ['SUPABASE_URL']
-SUPABASE_KEY = os.environ['SUPABASE_KEY']
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE') or os.getenv('SUPABASE_KEY')
 
-def store_analysis_results():
-    """Store analysis results back to Supabase"""
-    
+def post_json(path, payload):
     headers = {
         'apikey': SUPABASE_KEY,
         'Authorization': f'Bearer {SUPABASE_KEY}',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
     }
-    
-    # Load results from files
+    resp = requests.post(f"{SUPABASE_URL}{path}", headers=headers, data=json.dumps(payload), timeout=30)
+    return resp
+
+def store_analysis_results():
     results_stored = 0
-    
-    # Store arbitrage opportunities
+
     if os.path.exists('output/arbitrage.json'):
         with open('output/arbitrage.json', 'r') as f:
-            arbitrage = json.load(f)
-            
-        for opp in arbitrage[:10]:  # Store top 10
+            arbitrage = json.load(f) or []
+        for opp in arbitrage[:10]:
             data = {
                 'pattern_type': 'arbitrage',
                 'pattern_data': opp,
                 'confidence': 0.9,
-                'discovered_at': datetime.now().isoformat()
+                'discovered_at': datetime.utcnow().isoformat() + 'Z'
             }
-            
-            response = requests.post(
-                f"{SUPABASE_URL}/rest/v1/discovered_patterns",
-                headers=headers,
-                json=data
-            )
-            
-            if response.status_code == 201:
+            r = post_json("/rest/v1/discovered_patterns", data)
+            if r.status_code in (200, 201, 204):
                 results_stored += 1
-    
-    # Store momentum patterns
+
     if os.path.exists('output/patterns.json'):
         with open('output/patterns.json', 'r') as f:
-            patterns = json.load(f)
-            
-        for pattern in patterns[:10]:  # Store top 10
+            patterns = json.load(f) or []
+        for p in patterns[:10]:
             data = {
-                'pattern_type': pattern['type'],
-                'pattern_data': pattern,
-                'confidence': abs(pattern.get('strength', 0.5)),
-                'discovered_at': datetime.now().isoformat()
+                'pattern_type': p.get('type', 'unknown'),
+                'pattern_data': p,
+                'confidence': abs(float(p.get('strength', 0.5))),
+                'discovered_at': datetime.utcnow().isoformat() + 'Z'
             }
-            
-            response = requests.post(
-                f"{SUPABASE_URL}/rest/v1/discovered_patterns",
-                headers=headers,
-                json=data
-            )
-            
-            if response.status_code == 201:
+            r = post_json("/rest/v1/discovered_patterns", data)
+            if r.status_code in (200, 201, 204):
                 results_stored += 1
-    
+
     print(f"Stored {results_stored} analysis results to Supabase")
 
 if __name__ == "__main__":

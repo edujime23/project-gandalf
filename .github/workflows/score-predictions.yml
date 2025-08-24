@@ -2,32 +2,23 @@ name: Score Predictions
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
+    - cron: "*/30 * * * *"
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   score:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
       - name: Install deps
         run: |
-          pip install requests python-dateutil
-
+          pip install requests==2.32.5 python-dateutil==2.9.0.post0
       - name: Score predictions (30m horizon)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE }}   # service role to write
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
           PREDICTION_HORIZON_MIN: "30"
-        run: |
-          python scripts/score_predictions.py
+        run: python scripts/score_predictions.py

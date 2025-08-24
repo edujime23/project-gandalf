@@ -1,53 +1,33 @@
-﻿# FINAL & FIXED deep-analysis.yml
-name: Deep Market Analysis
+﻿name: Deep Market Analysis
 
 on:
   schedule:
-    - cron: '0 4 * * *'  # Every day at 4 AM UTC
-  workflow_dispatch: # Allows manual running
+    - cron: '0 4 * * *'
+  workflow_dispatch:
 
 jobs:
   analyze-and-store:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    
     steps:
-    - name: 1. Checkout Repository
-      uses: actions/checkout@v4 # Use latest version
-    
-    - name: 2. Setup Python
-      uses: actions/setup-python@v5 # Use latest version
-      with:
-        python-version: '3.10'
-    
-    - name: 3. Install Python Dependencies
-      run: |
-        pip install pandas numpy scipy requests
-    
-    - name: 4. Run Deep Analysis Script
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      run: |
-        python scripts/deep_analysis.py
-    
-    - name: 5. Store Results back to Supabase
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      run: |
-        python scripts/store_results.py
-        
-    - name: 6. Upload Results as Artifact (Optional)
-      uses: actions/upload-artifact@v4 # Use latest version
-      with:
-        name: analysis-results-${{ github.run_id }}
-        path: output/
-    - name: Notify on Failure
-      if: failure()
-      env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-      run: |
-        curl -H "Content-Type: application/json" \
-        -d "{\"content\": \"**GitHub Action Failed!**\n**Workflow:** ${{ github.workflow }}\n**Repo:** ${{ github.repository }}\n**Link:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-        $DISCORD_WEBHOOK
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.10' }
+      - name: Install deps
+        run: |
+          pip install pandas==2.3.2 numpy==2.2.6 scipy==1.14.1 requests==2.32.5
+      - name: Run analysis
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: python scripts/deep_analysis.py
+      - name: Store results
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: python scripts/store_results.py
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-results-${{ github.run_id }}
+          path: output/

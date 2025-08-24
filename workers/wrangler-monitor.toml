@@ -4,8 +4,8 @@ compatibility_date = "2024-01-01"
 account_id = "19d25279bc9bed348875d2f840c48588"
 
 [triggers]
-crons = ["*/30 * * * *"]  # Every 30 minutes
+crons = ["*/30 * * * *"]
 
 [[kv_namespaces]]
 binding = "MARKET_CACHE"
-id = "fdb7c06916734e528b4d37a963a52a04"  # Same as collector
+id = "fdb7c06916734e528b4d37a963a52a04"

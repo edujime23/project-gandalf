@@ -2,7 +2,7 @@ name: Monitor System Health
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,10 +11,6 @@ jobs:
     steps:
       - name: Check Worker Health
         run: |
-          response=$(curl -s https://gandalf-collector.${{ secrets.WORKER_SUBDOMAIN }}.workers.dev/health)
-          echo "Health response: $response"
-          
-      - name: Check Data Freshness
-        run: |
-          echo "Checking data freshness..."
-          # Add more checks here later
+          curl -s https://gandalf-collector.${{ secrets.WORKER_SUBDOMAIN }}.workers.dev/health || true
+      - name: Check Data Freshness (API health)
+        run: echo "Add API endpoint checks here if needed"

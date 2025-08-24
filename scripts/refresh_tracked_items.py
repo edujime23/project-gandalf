@@ -1,7 +1,8 @@
+#!/usr/bin/env python
 import os, requests, json
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE") or os.getenv("SUPABASE_KEY")
 
 def main(top_n=50):
     url = f"{SUPABASE_URL}/rest/v1/rpc/refresh_tracked_items"

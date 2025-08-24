@@ -85,11 +85,14 @@ def fetch_training_data(days: int = DAYS, page_size: int = PAGE_SIZE) -> pd.Data
         return pd.DataFrame()
 
     df = pd.DataFrame(all_rows)
-    df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601", utc=True)
+    # Robust timestamp parsing
+    df["timestamp"] = pd.to_datetime(df["timestamp"], format="ISO8601", utc=True, errors='coerce')
+    df = df.dropna(subset=["timestamp"])
+    # Numeric columns
     for col in ["sell_median", "buy_median", "spread", "sell_orders", "buy_orders"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna(subset=["timestamp", "item"]).reset_index(drop=True)
+    df = df.dropna(subset=["item"]).reset_index(drop=True)
     return df
 
 def compute_rsi(series: pd.Series, period: int = 14) -> pd.Series:
@@ -176,8 +179,9 @@ def train_unified_model(df: pd.DataFrame) -> Tuple[GradientBoostingRegressor, La
     X = pd.concat(X_list, axis=0)
     y = pd.concat(y_list, axis=0)
 
+    # Keep DataFrame to preserve feature names (prevents sklearn warning)
     X_train, X_test, y_train, y_test = train_test_split(
-        X.values, y.values, test_size=0.2, random_state=42, shuffle=True
+        X, y, test_size=0.2, random_state=42, shuffle=True
     )
 
     model = GradientBoostingRegressor(

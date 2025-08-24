@@ -26,8 +26,11 @@ def fetch_latest_data(item):
     data = resp.json()
     if not data:
         return None
-    df = pd.DataFrame(data).sort_values('timestamp')
-    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+    df = pd.DataFrame(data)
+    # Robust timestamp parsing
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
+    df = df.dropna(subset=['timestamp']).sort_values('timestamp')
+    # Numeric coercion
     for col in ['sell_median', 'buy_median', 'spread', 'sell_orders', 'buy_orders']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -96,7 +99,6 @@ def main():
     item_encoder = model_data['item_encoder']
     feature_columns = model_data['feature_columns']
 
-    # Fetch tracked items
     headers = {'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
     params = {'select': 'item', 'active': 'eq.true', 'order': 'score.desc', 'limit': '20'}
     resp = requests.get(f"{SUPABASE_URL}/rest/v1/tracked_items", headers=headers, params=params, timeout=30)
@@ -111,9 +113,10 @@ def main():
                 continue
             try:
                 item_encoded = item_encoder.transform([item])[0]
-            except:
+            except Exception:
                 # Item not seen in training
                 continue
+
             X = create_features_for_item(df, item_encoded, feature_columns)
             current_price = float(df['sell_median'].iloc[-1])
             predicted_price = float(model.predict(X)[0])

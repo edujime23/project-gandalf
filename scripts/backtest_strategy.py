@@ -22,7 +22,7 @@ class BacktestEngine:
         url = f"{SUPABASE_URL}/rest/v1/market_data"
         headers = {
             'apikey': SUPABASE_KEY,
-            'Authorization': f'Bearer {SUPABASE_KEY}`
+            'Authorization': f'Bearer {SUPABASE_KEY}'  # FIXED: Was missing closing quote
         }
         params = {
             'select': '*',
@@ -51,8 +51,25 @@ class BacktestEngine:
             offset += 1000
             
         df = pd.DataFrame(all_data)
-        # FIXED: Use format='ISO8601' to handle various timestamp formats
-        df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+        
+        # FIXED: Properly handle timestamp parsing with multiple formats
+        # Your timestamps can be with or without fractional seconds
+        try:
+            # First try with pandas automatic parsing
+            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
+        except:
+            # If that fails, try handling different formats manually
+            def parse_timestamp(ts):
+                # Handle both formats: with and without fractional seconds
+                for fmt in ['%Y-%m-%dT%H:%M:%S.%f%z', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%SZ']:
+                    try:
+                        return datetime.strptime(ts.replace('+00:00', 'Z'), fmt)
+                    except:
+                        continue
+                # Last resort - let pandas figure it out
+                return pd.to_datetime(ts)
+            
+            df['timestamp'] = df['timestamp'].apply(parse_timestamp)
         
         # Convert numeric columns
         numeric_cols = ['sell_median', 'buy_median', 'spread', 'sell_orders', 'buy_orders']
@@ -83,6 +100,10 @@ class BacktestEngine:
                 row = item_data.iloc[i]
                 prev_row = item_data.iloc[i-1]
                 
+                # Check for NaN values
+                if pd.isna(row['ma_5']) or pd.isna(row['ma_20']) or pd.isna(prev_row['ma_5']) or pd.isna(prev_row['ma_20']):
+                    continue
+                
                 # Golden cross - BUY signal
                 if prev_row['ma_5'] <= prev_row['ma_20'] and row['ma_5'] > row['ma_20']:
                     signals.append({
@@ -104,7 +125,7 @@ class BacktestEngine:
                     })
                 
                 # RSI oversold - BUY
-                elif row['rsi'] < 30:
+                elif not pd.isna(row['rsi']) and row['rsi'] < 30:
                     signals.append({
                         'timestamp': row['timestamp'],
                         'item': item,
@@ -114,7 +135,7 @@ class BacktestEngine:
                     })
                 
                 # RSI overbought - SELL
-                elif row['rsi'] > 70:
+                elif not pd.isna(row['rsi']) and row['rsi'] > 70:
                     signals.append({
                         'timestamp': row['timestamp'],
                         'item': item,
@@ -173,8 +194,8 @@ class BacktestEngine:
             # Check if we have capital
             position_size = min(self.capital * 0.1, 1000)  # Max 10% per trade
             
-            if self.capital >= position_size:
-                quantity = int(position_size / signal['price']) if signal['price'] > 0 else 0
+            if self.capital >= position_size and signal['price'] > 0:
+                quantity = int(position_size / signal['price'])
                 
                 if quantity > 0:
                     cost = quantity * signal['price']
@@ -262,10 +283,13 @@ class BacktestEngine:
             sharpe = 0
         
         # Max drawdown
-        cumulative = (1 + returns).cumprod()
-        running_max = cumulative.cummax()
-        drawdown = (cumulative - running_max) / running_max
-        max_drawdown = drawdown.min()
+        if len(returns) > 0:
+            cumulative = (1 + returns).cumprod()
+            running_max = cumulative.cummax()
+            drawdown = (cumulative - running_max) / running_max
+            max_drawdown = drawdown.min()
+        else:
+            max_drawdown = 0
         
         # Win rate
         winning_trades = [t for t in self.trades if t.get('profit', 0) > 0]

@@ -1,0 +1,47 @@
+﻿name: Strategy Backtest
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install Dependencies
+      run: |
+        pip install pandas numpy requests
+    
+    - name: Run Backtest
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: |
+        python scripts/backtest_strategy.py
+    
+    - name: Upload Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: backtest-results-${{ github.run_id }}
+        path: output/
+        retention-days: 30
+        
+    - name: Notify Success
+      if: success()
+      env:
+        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      run: |
+        curl -H "Content-Type: application/json" \
+        -d "{\"content\": \"✅ **Backtest Complete**\n**Strategy:** MA Crossover\n**Check results in Supabase dashboard**\"}" \
+        $DISCORD_WEBHOOK

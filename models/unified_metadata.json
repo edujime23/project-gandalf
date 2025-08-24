@@ -1,5 +1,5 @@
 {
-  "trained_at": "2025-08-24T06:09:50.963606+00:00",
+  "trained_at": "2025-08-24T06:15:55.742873+00:00",
   "model_type": "GradientBoostingRegressor",
   "train_days": 30,
   "horizon_steps": 6,
@@ -8,7 +8,7 @@
   "n_items": 10,
   "r2_train": 0.9922712298683029,
   "r2_test": 0.9825726719721365,
-  "train_time_seconds": 1.42,
+  "train_time_seconds": 1.4,
   "feature_importance": [
     {
       "feature": "price",

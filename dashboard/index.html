@@ -14,6 +14,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 
+    <!-- Particles.js for mind-bending effects -->
+    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -23,9 +26,9 @@
 
         :root {
             --bg-primary: #0a0e27;
-            --bg-secondary: #151934;
-            --bg-card: #1a1f3a;
-            --bg-hover: #242a4e;
+            --bg-secondary: rgba(21, 25, 52, 0.8);
+            --bg-card: rgba(26, 31, 58, 0.7);
+            --bg-hover: rgba(36, 42, 78, 0.9);
             --text-primary: #ffffff;
             --text-secondary: #8892b0;
             --text-muted: #64748b;
@@ -34,7 +37,7 @@
             --accent-success: #10b981;
             --accent-danger: #ef4444;
             --accent-warning: #f59e0b;
-            --border-color: #2a3356;
+            --border-color: rgba(42, 51, 86, 0.5);
             --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
             --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
             --shadow-lg: 0 10px 25px rgba(0,0,0,0.4);
@@ -42,6 +45,8 @@
             --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
             --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-blur: blur(20px);
         }
 
         body {
@@ -50,20 +55,31 @@
             color: var(--text-primary);
             line-height: 1.6;
             overflow-x: hidden;
+            position: relative;
         }
 
-            /* Animated Background */
-            body::before {
-                content: '';
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%), radial-gradient(circle at 40% 40%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
-                z-index: -1;
-                animation: float 20s ease-in-out infinite;
-            }
+        /* Mind-bending Animated Background with Particles */
+        #particles-js {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+            opacity: 0.3;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 50%), radial-gradient(circle at 40% 40%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+            z-index: -1;
+            animation: float 30s ease-in-out infinite, colorShift 15s ease-in-out infinite;
+        }
 
         @keyframes float {
             0%, 100% {
@@ -71,18 +87,32 @@
             }
 
             33% {
-                transform: translate(-20px, -20px) rotate(1deg);
+                transform: translate(-30px, -30px) rotate(2deg);
             }
 
             66% {
-                transform: translate(20px, -10px) rotate(-1deg);
+                transform: translate(30px, -20px) rotate(-2deg);
             }
         }
 
-        /* Header */
+        @keyframes colorShift {
+            0% {
+                filter: hue-rotate(0deg);
+            }
+
+            50% {
+                filter: hue-rotate(60deg);
+            }
+
+            100% {
+                filter: hue-rotate(0deg);
+            }
+        }
+
+        /* Header with Glassmorphism */
         .header {
             background: var(--bg-secondary);
-            backdrop-filter: blur(10px);
+            backdrop-filter: var(--glass-blur);
             border-bottom: 1px solid var(--border-color);
             position: sticky;
             top: 0;
@@ -108,6 +138,17 @@
             background: var(--gradient-primary);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 5px rgba(99, 102, 241, 0.5);
+            }
+
+            to {
+                text-shadow: 0 0 15px rgba(99, 102, 241, 0.8);
+            }
         }
 
         .status-badge {
@@ -115,7 +156,8 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.5rem 1rem;
-            background: var(--bg-card);
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
             border-radius: 2rem;
             font-size: 0.875rem;
             border: 1px solid var(--border-color);
@@ -123,7 +165,7 @@
         }
 
             .status-badge.live {
-                background: rgba(16, 185, 129, 0.1);
+                background: rgba(16, 185, 129, 0.15);
                 border-color: var(--accent-success);
                 color: var(--accent-success);
             }
@@ -134,30 +176,36 @@
             border-radius: 50%;
             background: var(--accent-danger);
             animation: pulse 2s infinite;
+            box-shadow: 0 0 10px var(--accent-danger);
         }
 
         .status-badge.live .status-indicator {
             background: var(--accent-success);
+            box-shadow: 0 0 10px var(--accent-success);
         }
 
         @keyframes pulse {
             0%, 100% {
                 opacity: 1;
+                transform: scale(1);
             }
 
             50% {
                 opacity: 0.5;
+                transform: scale(1.2);
             }
         }
 
-        /* Container */
+        /* Container with Parallax */
         .container {
             max-width: 1400px;
             margin: 0 auto;
             padding: 2rem;
+            position: relative;
+            z-index: 1;
         }
 
-        /* Stats Grid */
+        /* Stats Grid with Dynamic Scaling */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -167,12 +215,14 @@
 
         .stat-card {
             background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
             border: 1px solid var(--border-color);
             border-radius: 1rem;
             padding: 1.5rem;
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            animation: slideIn 0.5s ease forwards;
         }
 
             .stat-card::before {
@@ -183,13 +233,19 @@
                 width: 100%;
                 height: 4px;
                 background: var(--gradient-primary);
+                transition: height 0.3s ease;
             }
 
             .stat-card:hover {
-                transform: translateY(-2px);
-                box-shadow: var(--shadow-lg);
+                transform: translateY(-5px) scale(1.02);
+                box-shadow: var(--shadow-xl);
                 border-color: var(--accent-primary);
             }
+
+                .stat-card:hover::before {
+                    height: 100%;
+                    opacity: 0.1;
+                }
 
         .stat-label {
             color: var(--text-secondary);
@@ -205,6 +261,11 @@
             font-weight: 700;
             color: var(--text-primary);
             line-height: 1;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover .stat-value {
+            transform: scale(1.1);
         }
 
         .stat-change {
@@ -218,6 +279,7 @@
             border-radius: 0.5rem;
             font-size: 0.75rem;
             font-weight: 600;
+            animation: bounce 0.5s ease infinite alternate;
         }
 
             .stat-change.negative {
@@ -225,12 +287,23 @@
                 color: var(--accent-danger);
             }
 
-        /* Section Headers */
+        @keyframes bounce {
+            from {
+                transform: translateY(0);
+            }
+
+            to {
+                transform: translateY(-2px);
+            }
+        }
+
+        /* Section Headers with Dynamic Effects */
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin: 2rem 0 1rem;
+            position: relative;
         }
 
         .section-title {
@@ -240,13 +313,27 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
             .section-title i {
                 color: var(--accent-primary);
+                animation: spin 2s linear infinite;
             }
 
-        /* Grid Layout */
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Grid Layout with Masonry Effect */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -254,18 +341,39 @@
             margin-bottom: 2rem;
         }
 
-        /* Cards */
+        /* Cards with Glassmorphism and Hover Effects */
         .card {
             background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
             border: 1px solid var(--border-color);
             border-radius: 1rem;
             padding: 1.5rem;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+            overflow: hidden;
         }
 
+            .card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.2), transparent 80%);
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+            }
+
+            .card:hover::after {
+                opacity: 1;
+            }
+
             .card:hover {
-                transform: translateY(-2px);
-                box-shadow: var(--shadow-lg);
+                transform: translateY(-5px) rotate(1deg);
+                box-shadow: var(--shadow-xl);
+                border-color: transparent;
             }
 
         .card-header {
@@ -288,9 +396,14 @@
             font-size: 0.75rem;
             font-weight: 600;
             color: var(--text-secondary);
+            transition: transform 0.3s ease;
         }
 
-        /* Price Cards */
+        .card:hover .card-badge {
+            transform: rotate(360deg);
+        }
+
+        /* Price Cards with Dynamic Gradients */
         .price-card {
             position: relative;
             overflow: hidden;
@@ -306,12 +419,13 @@
                 background: var(--gradient-primary);
                 border-radius: 1rem;
                 opacity: 0;
-                transition: opacity 0.3s ease;
+                transition: opacity 0.3s ease, transform 0.5s ease;
                 z-index: -1;
             }
 
             .price-card:hover::after {
-                opacity: 0.1;
+                opacity: 0.2;
+                transform: scale(1.05);
             }
 
         .price-value {
@@ -321,6 +435,17 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin: 1rem 0;
+            animation: shimmer 2s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0;
+            }
+
+            100% {
+                background-position: 200% 0;
+            }
         }
 
         .price-details {
@@ -346,9 +471,31 @@
             color: var(--text-primary);
         }
 
-        /* Pattern Cards */
+        /* Pattern Cards with Animated Borders */
         .pattern-card {
             border-left: 4px solid var(--accent-success);
+            position: relative;
+        }
+
+            .pattern-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 4px;
+                height: 100%;
+                background: linear-gradient(to bottom, var(--accent-success), var(--accent-primary));
+                animation: flow 3s linear infinite;
+            }
+
+        @keyframes flow {
+            0% {
+                transform: translateY(-100%);
+            }
+
+            100% {
+                transform: translateY(100%);
+            }
         }
 
         .pattern-type {
@@ -363,7 +510,7 @@
             margin-bottom: 0.5rem;
         }
 
-        /* Signal Cards */
+        /* Signal Cards with Confidence Animation */
         .signal-card {
             border-left: 4px solid var(--accent-warning);
             position: relative;
@@ -396,15 +543,27 @@
             background: var(--bg-secondary);
             border-radius: 3px;
             overflow: hidden;
+            position: relative;
         }
 
         .confidence-fill {
             height: 100%;
             background: var(--gradient-primary);
-            transition: width 0.3s ease;
+            transition: width 1s ease-in-out;
+            animation: pulseFill 2s infinite;
         }
 
-        /* Buttons */
+        @keyframes pulseFill {
+            0%, 100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        /* Buttons with Ripple Effect */
         .btn {
             padding: 0.5rem 1rem;
             background: var(--gradient-primary);
@@ -418,10 +577,30 @@
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
         }
 
+            .btn::before {
+                content: '';
+                position: absolute;
+                top: var(--y);
+                left: var(--x);
+                width: 0;
+                height: 0;
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                transform: translate(-50%, -50%);
+                transition: width 0.5s ease, height 0.5s ease;
+            }
+
+            .btn:active::before {
+                width: 300px;
+                height: 300px;
+            }
+
             .btn:hover {
-                transform: translateY(-2px);
+                transform: translateY(-2px) scale(1.05);
                 box-shadow: var(--shadow-md);
             }
 
@@ -438,13 +617,15 @@
             background: var(--gradient-danger);
         }
 
-        /* Charts */
+        /* Charts with Enhanced Interactivity */
         .chart-container {
             background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
             border: 1px solid var(--border-color);
             border-radius: 1rem;
             padding: 1.5rem;
             margin-bottom: 2rem;
+            position: relative;
         }
 
         .chart-toolbar {
@@ -469,17 +650,19 @@
             .chart-btn:hover {
                 background: var(--bg-hover);
                 color: var(--text-primary);
+                transform: scale(1.1);
             }
 
             .chart-btn.active {
                 background: var(--accent-primary);
                 color: white;
                 border-color: var(--accent-primary);
+                box-shadow: 0 0 10px var(--accent-primary);
             }
 
-        /* Loading States */
+        /* Loading States with Skeleton Animation */
         .skeleton {
-            background: linear-gradient( 90deg, var(--bg-secondary) 25%, var(--bg-hover) 50%, var(--bg-secondary) 75% );
+            background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-hover) 50%, var(--bg-secondary) 75%);
             background-size: 200% 100%;
             animation: loading 1.5s infinite;
             border-radius: 0.5rem;
@@ -496,7 +679,7 @@
             }
         }
 
-        /* Responsive */
+        /* Responsive Design */
         @media (max-width: 768px) {
             .container {
                 padding: 1rem;
@@ -516,24 +699,25 @@
             }
         }
 
-        /* Animations */
+        /* SlideIn Animation */
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(50px) rotate(-5deg);
             }
 
             to {
                 opacity: 1;
-                transform: translateY(0);
+                transform: translateY(0) rotate(0deg);
             }
         }
 
-        .card {
-            animation: slideIn 0.5s ease forwards;
+        .card, .stat-card {
+            animation: slideIn 0.6s ease forwards;
+            animation-delay: calc(var(--index) * 0.1s);
         }
 
-        /* Tooltips */
+        /* Tooltips with Animation */
         .tooltip {
             position: relative;
             cursor: help;
@@ -544,7 +728,7 @@
                 position: absolute;
                 bottom: 100%;
                 left: 50%;
-                transform: translateX(-50%);
+                transform: translateX(-50%) scale(0.8);
                 padding: 0.5rem;
                 background: var(--bg-secondary);
                 color: var(--text-primary);
@@ -553,15 +737,19 @@
                 white-space: nowrap;
                 opacity: 0;
                 pointer-events: none;
-                transition: opacity 0.3s ease;
+                transition: all 0.3s ease;
             }
 
             .tooltip:hover::after {
                 opacity: 1;
+                transform: translateX(-50%) scale(1);
             }
     </style>
 </head>
 <body>
+    <!-- Particles Background -->
+    <div id="particles-js"></div>
+
     <!-- Header -->
     <header class="header">
         <div class="header-content">
@@ -580,7 +768,7 @@
     <div class="container">
         <!-- Key Metrics -->
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" style="--index: 1;">
                 <div class="stat-label">Total Data Points</div>
                 <div class="stat-value" id="total-data">0</div>
                 <div class="stat-change">
@@ -588,7 +776,7 @@
                     <span>+12.5%</span>
                 </div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" style="--index: 2;">
                 <div class="stat-label">Active Predictions</div>
                 <div class="stat-value" id="active-predictions">0</div>
                 <div class="stat-change">
@@ -596,7 +784,7 @@
                     <span>+8.3%</span>
                 </div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" style="--index: 3;">
                 <div class="stat-label">Model Accuracy</div>
                 <div class="stat-value" id="model-accuracy">0%</div>
                 <div class="stat-change">
@@ -604,7 +792,7 @@
                     <span>+2.1%</span>
                 </div>
             </div>
-            <div class="stat-card">
+            <div class="stat-card" style="--index: 4;">
                 <div class="stat-label">Trading Signals</div>
                 <div class="stat-value" id="trading-signals">0</div>
                 <div class="stat-change negative">
@@ -668,7 +856,7 @@
                 <button class="chart-btn" data-range="168">7D</button>
                 <button class="chart-btn" data-range="720">30D</button>
             </div>
-            <canvas id="priceChart" height="100"></canvas>
+            <canvas id="priceChart" height="400"></canvas>
         </div>
     </div>
 
@@ -677,10 +865,51 @@
         let priceChart = null;
         let selectedTimeRange = 6;
 
-        // Initialize
+        // Initialize Particles for Mind-Bending Background
+        particlesJS('particles-js', {
+            particles: {
+                number: { value: 80, density: { enable: true, value_area: 800 } },
+                color: { value: '#6366f1' },
+                shape: { type: 'circle' },
+                opacity: { value: 0.3, random: true, anim: { enable: true, speed: 1, opacity_min: 0.1 } },
+                size: { value: 3, random: true, anim: { enable: true, speed: 2, size_min: 0.1 } },
+                line_linked: { enable: true, distance: 150, color: '#818cf8', opacity: 0.2, width: 1 },
+                move: { enable: true, speed: 1, direction: 'none', random: true, straight: false, out_mode: 'out', bounce: false }
+            },
+            interactivity: {
+                detect_on: 'canvas',
+                events: { onhover: { enable: true, mode: 'grab' }, onclick: { enable: true, mode: 'push' }, resize: true },
+                modes: { grab: { distance: 140, line_linked: { opacity: 0.5 } }, push: { particles_nb: 4 } }
+            },
+            retina_detect: true
+        });
+
+        // Mouse Move for Dynamic Card Effects
+        document.addEventListener('mousemove', (e) => {
+            document.querySelectorAll('.card').forEach(card => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mouse-x', `${(x / rect.width) * 100}%`);
+                card.style.setProperty('--mouse-y', `${(y / rect.height) * 100}%`);
+            });
+        });
+
+        // Button Ripple Effect
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                btn.style.setProperty('--x', `${x}px`);
+                btn.style.setProperty('--y', `${y}px`);
+            });
+        });
+
+        // Initialize App
         document.addEventListener('DOMContentLoaded', () => {
             initializeApp();
-            setInterval(updateData, 60000); // Update every minute
+            setInterval(updateData, 30000); // Update every 30 seconds for more dynamism
         });
 
         async function initializeApp() {
@@ -718,8 +947,8 @@
                 });
 
                 const grid = document.getElementById('prices-grid');
-                grid.innerHTML = Object.values(latestPrices).slice(0, 9).map(item => `
-                        <div class="card price-card">
+                grid.innerHTML = Object.values(latestPrices).slice(0, 9).map((item, index) => `
+                        <div class="card price-card" style="--index: ${index + 1};">
                             <div class="card-header">
                                 <h3 class="card-title">${item.item.replace(/_/g, ' ').toUpperCase()}</h3>
                                 <span class="card-badge">${item.buy_orders + item.sell_orders} orders</span>
@@ -753,8 +982,8 @@
                     return;
                 }
 
-                grid.innerHTML = signals.slice(0, 6).map(signal => `
-                        <div class="card signal-card ${signal.type.toLowerCase()}">
+                grid.innerHTML = signals.slice(0, 6).map((signal, index) => `
+                        <div class="card signal-card ${signal.type.toLowerCase()}" style="--index: ${index + 1};">
                             <div class="card-header">
                                 <h3 class="card-title">${signal.item.replace(/_/g, ' ').toUpperCase()}</h3>
                                 <span class="card-badge">${signal.type}</span>
@@ -789,7 +1018,7 @@
                     return;
                 }
 
-                grid.innerHTML = patterns.slice(0, 6).map(pattern => {
+                grid.innerHTML = patterns.slice(0, 6).map((pattern, index) => {
                     let content = '';
                     if (pattern.type === 'correlation') {
                         content = `
@@ -804,7 +1033,7 @@
                                 <p>Change: ${pattern.change}%</p>
                             `;
                     }
-                    return `<div class="card pattern-card">${content}</div>`;
+                    return `<div class="card pattern-card" style="--index: ${index + 1};">${content}</div>`;
                 }).join('');
             } catch (error) {
                 console.error('Failed to load patterns:', error);
@@ -867,7 +1096,12 @@
                             titleColor: '#ffffff',
                             bodyColor: '#8892b0',
                             borderColor: '#2a3356',
-                            borderWidth: 1
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function (context) {
+                                    return `${context.dataset.label}: ${context.parsed.y}p`;
+                                }
+                            }
                         }
                     },
                     scales: {
@@ -890,9 +1124,16 @@
                                 drawBorder: false
                             },
                             ticks: {
-                                color: '#8892b0'
+                                color: '#8892b0',
+                                callback: function (value) {
+                                    return value + 'p';
+                                }
                             }
                         }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeInOutCubic'
                     }
                 }
             });
@@ -929,13 +1170,16 @@
 
             return Object.entries(itemData).slice(0, 5).map(([item, data], index) => ({
                 label: item.replace(/_/g, ' ').toUpperCase(),
-                data: data,
+                data: data.sort((a, b) => a.x - b.x), // Ensure sorted
                 borderColor: colors[index % colors.length],
                 backgroundColor: colors[index % colors.length] + '20',
                 borderWidth: 2,
                 tension: 0.4,
                 pointRadius: 0,
-                pointHoverRadius: 5
+                pointHoverRadius: 8,
+                pointHoverBackgroundColor: colors[index % colors.length],
+                pointHoverBorderColor: '#ffffff',
+                pointHoverBorderWidth: 2
             }));
         }
 
@@ -953,7 +1197,8 @@
                 loadPrices(),
                 loadSignals(),
                 loadPatterns(),
-                loadMetrics()
+                loadMetrics(),
+                updateChart()
             ]);
         }
     </script>

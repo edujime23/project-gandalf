@@ -6,16 +6,13 @@
     <title>Gandalf Market Intelligence</title>
     <link rel="icon" href="data:,">
 
-    <!-- Modern fonts and icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Fonts and Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
-    <!-- Particles.js for mind-bending effects -->
-    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
 
     <style>
         * {
@@ -25,606 +22,169 @@
         }
 
         :root {
-            --bg-primary: #0a0e27;
-            --bg-secondary: rgba(21, 25, 52, 0.8);
-            --bg-card: rgba(26, 31, 58, 0.7);
-            --bg-hover: rgba(36, 42, 78, 0.9);
-            --text-primary: #ffffff;
-            --text-secondary: #8892b0;
-            --text-muted: #64748b;
-            --accent-primary: #6366f1;
-            --accent-secondary: #818cf8;
+            --bg-primary: #f8f9fc;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --accent-primary: #4f46e5;
             --accent-success: #10b981;
             --accent-danger: #ef4444;
-            --accent-warning: #f59e0b;
-            --border-color: rgba(42, 51, 86, 0.5);
-            --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
-            --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
-            --shadow-lg: 0 10px 25px rgba(0,0,0,0.4);
-            --shadow-xl: 0 20px 40px rgba(0,0,0,0.5);
-            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-blur: blur(20px);
+            --border-color: #e5e7eb;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Inter', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             line-height: 1.6;
-            overflow-x: hidden;
-            position: relative;
+            font-size: 16px;
         }
 
-        /* Mind-bending Animated Background with Particles */
-        #particles-js {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -2;
-            opacity: 0.3;
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
         }
 
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 50%), radial-gradient(circle at 40% 40%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
-            z-index: -1;
-            animation: float 30s ease-in-out infinite, colorShift 15s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% {
-                transform: translate(0, 0) rotate(0deg);
-            }
-
-            33% {
-                transform: translate(-30px, -30px) rotate(2deg);
-            }
-
-            66% {
-                transform: translate(30px, -20px) rotate(-2deg);
-            }
-        }
-
-        @keyframes colorShift {
-            0% {
-                filter: hue-rotate(0deg);
-            }
-
-            50% {
-                filter: hue-rotate(60deg);
-            }
-
-            100% {
-                filter: hue-rotate(0deg);
-            }
-        }
-
-        /* Header with Glassmorphism */
+        /* Header */
         .header {
             background: var(--bg-secondary);
-            backdrop-filter: var(--glass-blur);
             border-bottom: 1px solid var(--border-color);
             position: sticky;
             top: 0;
-            z-index: 100;
-            box-shadow: var(--shadow-md);
+            z-index: 10;
+            box-shadow: var(--shadow-sm);
         }
 
         .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 1rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 1rem;
         }
 
         .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
             font-size: 1.5rem;
             font-weight: 700;
-            background: var(--gradient-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: glow 2s ease-in-out infinite alternate;
-        }
-
-        @keyframes glow {
-            from {
-                text-shadow: 0 0 5px rgba(99, 102, 241, 0.5);
-            }
-
-            to {
-                text-shadow: 0 0 15px rgba(99, 102, 241, 0.8);
-            }
+            color: var(--accent-primary);
         }
 
         .status-badge {
-            display: inline-flex;
+            display: flex;
             align-items: center;
             gap: 0.5rem;
             padding: 0.5rem 1rem;
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            border-radius: 2rem;
+            background: #f3f4f6;
+            border-radius: 1rem;
             font-size: 0.875rem;
-            border: 1px solid var(--border-color);
-            transition: all 0.3s ease;
         }
-
-            .status-badge.live {
-                background: rgba(16, 185, 129, 0.15);
-                border-color: var(--accent-success);
-                color: var(--accent-success);
-            }
 
         .status-indicator {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             background: var(--accent-danger);
-            animation: pulse 2s infinite;
-            box-shadow: 0 0 10px var(--accent-danger);
         }
 
         .status-badge.live .status-indicator {
             background: var(--accent-success);
-            box-shadow: 0 0 10px var(--accent-success);
         }
 
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-
-            50% {
-                opacity: 0.5;
-                transform: scale(1.2);
-            }
+        /* Sections */
+        .section {
+            margin-bottom: 3rem;
         }
 
-        /* Container with Parallax */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-            position: relative;
-            z-index: 1;
-        }
-
-        /* Stats Grid with Dynamic Scaling */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card {
-            background: var(--bg-card);
-            backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            animation: slideIn 0.5s ease forwards;
-        }
-
-            .stat-card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 4px;
-                background: var(--gradient-primary);
-                transition: height 0.3s ease;
-            }
-
-            .stat-card:hover {
-                transform: translateY(-5px) scale(1.02);
-                box-shadow: var(--shadow-xl);
-                border-color: var(--accent-primary);
-            }
-
-                .stat-card:hover::before {
-                    height: 100%;
-                    opacity: 0.1;
-                }
-
-        .stat-label {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            line-height: 1;
-            transition: transform 0.3s ease;
-        }
-
-        .stat-card:hover .stat-value {
-            transform: scale(1.1);
-        }
-
-        .stat-change {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            margin-top: 0.5rem;
-            padding: 0.25rem 0.5rem;
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--accent-success);
-            border-radius: 0.5rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            animation: bounce 0.5s ease infinite alternate;
-        }
-
-            .stat-change.negative {
-                background: rgba(239, 68, 68, 0.1);
-                color: var(--accent-danger);
-            }
-
-        @keyframes bounce {
-            from {
-                transform: translateY(0);
-            }
-
-            to {
-                transform: translateY(-2px);
-            }
-        }
-
-        /* Section Headers with Dynamic Effects */
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin: 2rem 0 1rem;
-            position: relative;
+            margin-bottom: 1.5rem;
         }
 
         .section-title {
-            font-size: 1.25rem;
+            font-size: 1.5rem;
             font-weight: 600;
-            color: var(--text-primary);
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Stats */
+        .stats-container {
             display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: var(--gradient-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-            .section-title i {
-                color: var(--accent-primary);
-                animation: spin 2s linear infinite;
-            }
-
-        @keyframes spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* Grid Layout with Masonry Effect */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            flex-wrap: wrap;
             gap: 1.5rem;
-            margin-bottom: 2rem;
         }
 
-        /* Cards with Glassmorphism and Hover Effects */
-        .card {
-            background: var(--bg-card);
-            backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            position: relative;
-            overflow: hidden;
-        }
-
-            .card::after {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.2), transparent 80%);
-                opacity: 0;
-                transition: opacity 0.3s ease;
-                pointer-events: none;
-            }
-
-            .card:hover::after {
-                opacity: 1;
-            }
-
-            .card:hover {
-                transform: translateY(-5px) rotate(1deg);
-                box-shadow: var(--shadow-xl);
-                border-color: transparent;
-            }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .card-title {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .card-badge {
-            padding: 0.25rem 0.75rem;
-            background: var(--bg-secondary);
-            border-radius: 2rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            transition: transform 0.3s ease;
-        }
-
-        .card:hover .card-badge {
-            transform: rotate(360deg);
-        }
-
-        /* Price Cards with Dynamic Gradients */
-        .price-card {
-            position: relative;
-            overflow: hidden;
-        }
-
-            .price-card::after {
-                content: '';
-                position: absolute;
-                top: -2px;
-                left: -2px;
-                right: -2px;
-                bottom: -2px;
-                background: var(--gradient-primary);
-                border-radius: 1rem;
-                opacity: 0;
-                transition: opacity 0.3s ease, transform 0.5s ease;
-                z-index: -1;
-            }
-
-            .price-card:hover::after {
-                opacity: 0.2;
-                transform: scale(1.05);
-            }
-
-        .price-value {
-            font-size: 2.5rem;
-            font-weight: 800;
-            background: var(--gradient-primary);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 1rem 0;
-            animation: shimmer 2s linear infinite;
-        }
-
-        @keyframes shimmer {
-            0% {
-                background-position: -200% 0;
-            }
-
-            100% {
-                background-position: 200% 0;
-            }
-        }
-
-        .price-details {
-            display: flex;
-            gap: 1rem;
-            margin: 1rem 0;
-        }
-
-        .price-detail {
+        .stat-card {
             flex: 1;
+            min-width: 200px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s ease;
         }
 
-        .price-detail-label {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .price-detail-value {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        /* Pattern Cards with Animated Borders */
-        .pattern-card {
-            border-left: 4px solid var(--accent-success);
-            position: relative;
-        }
-
-            .pattern-card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 4px;
-                height: 100%;
-                background: linear-gradient(to bottom, var(--accent-success), var(--accent-primary));
-                animation: flow 3s linear infinite;
+            .stat-card:hover {
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }
 
-        @keyframes flow {
-            0% {
-                transform: translateY(-100%);
-            }
-
-            100% {
-                transform: translateY(100%);
-            }
-        }
-
-        .pattern-type {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--accent-success);
-            border-radius: 0.5rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
             margin-bottom: 0.5rem;
         }
 
-        /* Signal Cards with Confidence Animation */
-        .signal-card {
-            border-left: 4px solid var(--accent-warning);
-            position: relative;
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
         }
 
-            .signal-card.buy {
-                border-left-color: var(--accent-success);
-            }
-
-            .signal-card.sell {
-                border-left-color: var(--accent-danger);
-            }
-
-        .signal-action {
+        /* Cards */
+        .card-list {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 1rem;
+            flex-direction: column;
+            gap: 1.5rem;
         }
 
-        .signal-confidence {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s ease;
         }
 
-        .confidence-bar {
-            width: 100px;
-            height: 6px;
-            background: var(--bg-secondary);
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            background: var(--gradient-primary);
-            transition: width 1s ease-in-out;
-            animation: pulseFill 2s infinite;
-        }
-
-        @keyframes pulseFill {
-            0%, 100% {
-                opacity: 1;
+            .card:hover {
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }
 
-            50% {
-                opacity: 0.7;
-            }
-        }
-
-        /* Buttons with Ripple Effect */
-        .btn {
-            padding: 0.5rem 1rem;
-            background: var(--gradient-primary);
-            color: white;
-            border: none;
-            border-radius: 0.5rem;
+        .card-title {
+            font-size: 1.125rem;
             font-weight: 600;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            position: relative;
-            overflow: hidden;
+            margin-bottom: 0.5rem;
         }
 
-            .btn::before {
-                content: '';
-                position: absolute;
-                top: var(--y);
-                left: var(--x);
-                width: 0;
-                height: 0;
-                background: rgba(255, 255, 255, 0.3);
-                border-radius: 50%;
-                transform: translate(-50%, -50%);
-                transition: width 0.5s ease, height 0.5s ease;
-            }
-
-            .btn:active::before {
-                width: 300px;
-                height: 300px;
-            }
-
-            .btn:hover {
-                transform: translateY(-2px) scale(1.05);
-                box-shadow: var(--shadow-md);
-            }
-
-        .btn-secondary {
-            background: var(--bg-secondary);
-            color: var(--text-secondary);
-        }
-
-        .btn-success {
-            background: var(--gradient-success);
-        }
-
-        .btn-danger {
-            background: var(--gradient-danger);
-        }
-
-        /* Charts with Enhanced Interactivity */
+        /* Chart */
         .chart-container {
             background: var(--bg-card);
-            backdrop-filter: var(--glass-blur);
             border: 1px solid var(--border-color);
-            border-radius: 1rem;
+            border-radius: 0.75rem;
             padding: 1.5rem;
-            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            height: 400px; /* Fixed height to prevent expansion */
+            max-height: 400px;
+            overflow: hidden;
             position: relative;
         }
 
@@ -632,131 +192,65 @@
             display: flex;
             gap: 0.5rem;
             margin-bottom: 1rem;
-            flex-wrap: wrap;
         }
 
         .chart-btn {
-            padding: 0.375rem 0.75rem;
-            background: var(--bg-secondary);
-            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            background: #f3f4f6;
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
-            font-size: 0.75rem;
-            font-weight: 600;
+            font-size: 0.875rem;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background 0.2s ease;
         }
 
             .chart-btn:hover {
-                background: var(--bg-hover);
-                color: var(--text-primary);
-                transform: scale(1.1);
+                background: #e5e7eb;
             }
 
             .chart-btn.active {
                 background: var(--accent-primary);
                 color: white;
-                border-color: var(--accent-primary);
-                box-shadow: 0 0 10px var(--accent-primary);
             }
 
-        /* Loading States with Skeleton Animation */
-        .skeleton {
-            background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-hover) 50%, var(--bg-secondary) 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
             border-radius: 0.5rem;
-            height: 100px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background 0.2s ease;
         }
 
-        @keyframes loading {
-            0% {
-                background-position: 200% 0;
+            .btn:hover {
+                background: #4338ca;
             }
 
-            100% {
-                background-position: -200% 0;
-            }
-        }
-
-        /* Responsive Design */
+        /* Responsive */
         @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            .grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 1rem;
-            }
-
-            .price-value {
-                font-size: 2rem;
+            .stats-container {
+                flex-direction: column;
             }
         }
-
-        /* SlideIn Animation */
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(50px) rotate(-5deg);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0) rotate(0deg);
-            }
-        }
-
-        .card, .stat-card {
-            animation: slideIn 0.6s ease forwards;
-            animation-delay: calc(var(--index) * 0.1s);
-        }
-
-        /* Tooltips with Animation */
-        .tooltip {
-            position: relative;
-            cursor: help;
-        }
-
-            .tooltip::after {
-                content: attr(data-tooltip);
-                position: absolute;
-                bottom: 100%;
-                left: 50%;
-                transform: translateX(-50%) scale(0.8);
-                padding: 0.5rem;
-                background: var(--bg-secondary);
-                color: var(--text-primary);
-                border-radius: 0.5rem;
-                font-size: 0.75rem;
-                white-space: nowrap;
-                opacity: 0;
-                pointer-events: none;
-                transition: all 0.3s ease;
-            }
-
-            .tooltip:hover::after {
-                opacity: 1;
-                transform: translateX(-50%) scale(1);
-            }
     </style>
 </head>
 <body>
-    <!-- Particles Background -->
-    <div id="particles-js"></div>
-
     <!-- Header -->
     <header class="header">
-        <div class="header-content">
-            <div class="logo">
-                <span>🧙‍♂️</span>
-                <span>Gandalf Intelligence</span>
-            </div>
+        <div class="header-content container">
+            <div class="logo">🧙‍♂️ Gandalf Intelligence</div>
             <div class="status-badge" id="system-status">
                 <span class="status-indicator"></span>
                 <span>Connecting...</span>
@@ -765,162 +259,107 @@
     </header>
 
     <!-- Main Content -->
-    <div class="container">
-        <!-- Key Metrics -->
-        <div class="stats-grid">
-            <div class="stat-card" style="--index: 1;">
-                <div class="stat-label">Total Data Points</div>
-                <div class="stat-value" id="total-data">0</div>
-                <div class="stat-change">
-                    <i class="ri-arrow-up-line"></i>
-                    <span>+12.5%</span>
+    <main class="container">
+        <!-- Key Metrics Section -->
+        <section class="section">
+            <h2 class="section-title">Key Metrics</h2>
+            <div class="stats-container">
+                <div class="stat-card">
+                    <div class="stat-label">Total Data Points</div>
+                    <div class="stat-value" id="total-data">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Predictions</div>
+                    <div class="stat-value" id="active-predictions">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Model Accuracy</div>
+                    <div class="stat-value" id="model-accuracy">0%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Trading Signals</div>
+                    <div class="stat-value" id="trading-signals">0</div>
                 </div>
             </div>
-            <div class="stat-card" style="--index: 2;">
-                <div class="stat-label">Active Predictions</div>
-                <div class="stat-value" id="active-predictions">0</div>
-                <div class="stat-change">
-                    <i class="ri-arrow-up-line"></i>
-                    <span>+8.3%</span>
+        </section>
+
+        <hr>
+
+        <!-- Live Market Prices Section -->
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">Live Market Prices</h2>
+                <button class="btn" onclick="loadPrices()">Refresh</button>
+            </div>
+            <div class="card-list" id="prices-list"></div>
+        </section>
+
+        <hr>
+
+        <!-- Active Trading Signals Section -->
+        <section class="section">
+            <h2 class="section-title">Active Trading Signals</h2>
+            <div class="card-list" id="signals-list"></div>
+        </section>
+
+        <hr>
+
+        <!-- Discovered Patterns Section -->
+        <section class="section">
+            <h2 class="section-title">Discovered Patterns</h2>
+            <div class="card-list" id="patterns-list"></div>
+        </section>
+
+        <hr>
+
+        <!-- Price Trends Section -->
+        <section class="section">
+            <h2 class="section-title">Price Trends</h2>
+            <div class="chart-container">
+                <div class="chart-toolbar">
+                    <button class="chart-btn active" data-range="6">6H</button>
+                    <button class="chart-btn" data-range="24">24H</button>
+                    <button class="chart-btn" data-range="72">3D</button>
+                    <button class="chart-btn" data-range="168">7D</button>
+                    <button class="chart-btn" data-range="720">30D</button>
                 </div>
+                <canvas id="priceChart"></canvas>
+                <div class="loading-spinner" id="chart-loading">Loading chart...</div>
             </div>
-            <div class="stat-card" style="--index: 3;">
-                <div class="stat-label">Model Accuracy</div>
-                <div class="stat-value" id="model-accuracy">0%</div>
-                <div class="stat-change">
-                    <i class="ri-arrow-up-line"></i>
-                    <span>+2.1%</span>
-                </div>
-            </div>
-            <div class="stat-card" style="--index: 4;">
-                <div class="stat-label">Trading Signals</div>
-                <div class="stat-value" id="trading-signals">0</div>
-                <div class="stat-change negative">
-                    <i class="ri-arrow-down-line"></i>
-                    <span>-5.2%</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Market Prices -->
-        <div class="section-header">
-            <h2 class="section-title">
-                <i class="ri-line-chart-line"></i>
-                Live Market Prices
-            </h2>
-            <button class="btn btn-secondary" onclick="loadPrices()">
-                <i class="ri-refresh-line"></i>
-                Refresh
-            </button>
-        </div>
-        <div class="grid" id="prices-grid">
-            <div class="skeleton"></div>
-            <div class="skeleton"></div>
-            <div class="skeleton"></div>
-        </div>
-
-        <!-- Trading Signals -->
-        <div class="section-header">
-            <h2 class="section-title">
-                <i class="ri-notification-3-line"></i>
-                Active Trading Signals
-            </h2>
-        </div>
-        <div class="grid" id="signals-grid">
-            <div class="skeleton"></div>
-        </div>
-
-        <!-- Pattern Discovery -->
-        <div class="section-header">
-            <h2 class="section-title">
-                <i class="ri-search-eye-line"></i>
-                Discovered Patterns
-            </h2>
-        </div>
-        <div class="grid" id="patterns-grid">
-            <div class="skeleton"></div>
-        </div>
-
-        <!-- Price Chart -->
-        <div class="section-header">
-            <h2 class="section-title">
-                <i class="ri-stock-line"></i>
-                Price Trends
-            </h2>
-        </div>
-        <div class="chart-container">
-            <div class="chart-toolbar">
-                <button class="chart-btn active" data-range="6">6H</button>
-                <button class="chart-btn" data-range="24">24H</button>
-                <button class="chart-btn" data-range="72">3D</button>
-                <button class="chart-btn" data-range="168">7D</button>
-                <button class="chart-btn" data-range="720">30D</button>
-            </div>
-            <canvas id="priceChart" height="400"></canvas>
-        </div>
-    </div>
+        </section>
+    </main>
 
     <script>
         const API_BASE_URL = '/api';
         let priceChart = null;
         let selectedTimeRange = 6;
+        let resizeTimeout;
 
-        // Initialize Particles for Mind-Bending Background
-        particlesJS('particles-js', {
-            particles: {
-                number: { value: 80, density: { enable: true, value_area: 800 } },
-                color: { value: '#6366f1' },
-                shape: { type: 'circle' },
-                opacity: { value: 0.3, random: true, anim: { enable: true, speed: 1, opacity_min: 0.1 } },
-                size: { value: 3, random: true, anim: { enable: true, speed: 2, size_min: 0.1 } },
-                line_linked: { enable: true, distance: 150, color: '#818cf8', opacity: 0.2, width: 1 },
-                move: { enable: true, speed: 1, direction: 'none', random: true, straight: false, out_mode: 'out', bounce: false }
-            },
-            interactivity: {
-                detect_on: 'canvas',
-                events: { onhover: { enable: true, mode: 'grab' }, onclick: { enable: true, mode: 'push' }, resize: true },
-                modes: { grab: { distance: 140, line_linked: { opacity: 0.5 } }, push: { particles_nb: 4 } }
-            },
-            retina_detect: true
-        });
+        // Debounce function to prevent lag on resize
+        function debounce(fn, delay) {
+            return function () {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(fn, delay);
+            };
+        }
 
-        // Mouse Move for Dynamic Card Effects
-        document.addEventListener('mousemove', (e) => {
-            document.querySelectorAll('.card').forEach(card => {
-                const rect = card.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                card.style.setProperty('--mouse-x', `${(x / rect.width) * 100}%`);
-                card.style.setProperty('--mouse-y', `${(y / rect.height) * 100}%`);
-            });
-        });
-
-        // Button Ripple Effect
-        document.querySelectorAll('.btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const rect = btn.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                btn.style.setProperty('--x', `${x}px`);
-                btn.style.setProperty('--y', `${y}px`);
-            });
-        });
-
-        // Initialize App
         document.addEventListener('DOMContentLoaded', () => {
             initializeApp();
-            setInterval(updateData, 30000); // Update every 30 seconds for more dynamism
+            setInterval(updateData, 60000); // Update every 60 seconds
+
+            // Debounced resize handler for chart
+            window.addEventListener('resize', debounce(() => {
+                if (priceChart) priceChart.resize();
+            }, 250));
         });
 
         async function initializeApp() {
-            await Promise.all([
-                loadPrices(),
-                loadSignals(),
-                loadPatterns(),
-                loadMetrics(),
-                initChart()
-            ]);
             setSystemStatus(true);
+            await loadMetrics();
+            await loadPrices();
+            await loadSignals();
+            await loadPatterns();
+            await initChart();
         }
 
         function setSystemStatus(isLive) {
@@ -936,38 +375,24 @@
 
         async function loadPrices() {
             try {
-                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=100`);
+                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=50`);
                 const data = await response.json();
-
                 const latestPrices = {};
                 data.forEach(item => {
-                    if (!latestPrices[item.item]) {
-                        latestPrices[item.item] = item;
-                    }
+                    if (!latestPrices[item.item]) latestPrices[item.item] = item;
                 });
 
-                const grid = document.getElementById('prices-grid');
-                grid.innerHTML = Object.values(latestPrices).slice(0, 9).map((item, index) => `
-                        <div class="card price-card" style="--index: ${index + 1};">
-                            <div class="card-header">
-                                <h3 class="card-title">${item.item.replace(/_/g, ' ').toUpperCase()}</h3>
-                                <span class="card-badge">${item.buy_orders + item.sell_orders} orders</span>
-                            </div>
-                            <div class="price-value">${item.sell_median}p</div>
-                            <div class="price-details">
-                                <div class="price-detail">
-                                    <div class="price-detail-label">Buy</div>
-                                    <div class="price-detail-value">${item.buy_median}p</div>
-                                </div>
-                                <div class="price-detail">
-                                    <div class="price-detail-label">Spread</div>
-                                    <div class="price-detail-value">${item.spread}p</div>
-                                </div>
-                            </div>
+                const list = document.getElementById('prices-list');
+                list.innerHTML = Object.values(latestPrices).slice(0, 4).map(item => `
+                        <div class="card">
+                            <div class="card-title">${item.item.replace(/_/g, ' ').toUpperCase()}</div>
+                            <p>Sell Median: ${item.sell_median}p</p>
+                            <p>Buy Median: ${item.buy_median}p</p>
+                            <p>Spread: ${item.spread}p</p>
                         </div>
-                    `).join('');
+                    `).join('') || '<div class="card">No data available</div>';
             } catch (error) {
-                console.error('Failed to load prices:', error);
+                document.getElementById('prices-list').innerHTML = '<div class="card">Error loading prices</div>';
             }
         }
 
@@ -975,35 +400,17 @@
             try {
                 const response = await fetch(`${API_BASE_URL}/signals`);
                 const signals = await response.json();
-
-                const grid = document.getElementById('signals-grid');
-                if (!signals.length) {
-                    grid.innerHTML = '<div class="card"><p style="color: var(--text-muted);">No active signals</p></div>';
-                    return;
-                }
-
-                grid.innerHTML = signals.slice(0, 6).map((signal, index) => `
-                        <div class="card signal-card ${signal.type.toLowerCase()}" style="--index: ${index + 1};">
-                            <div class="card-header">
-                                <h3 class="card-title">${signal.item.replace(/_/g, ' ').toUpperCase()}</h3>
-                                <span class="card-badge">${signal.type}</span>
-                            </div>
-                            <p style="color: var(--text-secondary); margin: 1rem 0;">${signal.reason || 'Trading opportunity detected'}</p>
-                            <div class="signal-action">
-                                <div class="signal-confidence">
-                                    <span style="font-size: 0.875rem;">Confidence:</span>
-                                    <div class="confidence-bar">
-                                        <div class="confidence-fill" style="width: ${(signal.confidence || 0) * 100}%"></div>
-                                    </div>
-                                    <span style="font-weight: 600;">${Math.round((signal.confidence || 0) * 100)}%</span>
-                                </div>
-                            </div>
+                const list = document.getElementById('signals-list');
+                list.innerHTML = signals.slice(0, 4).map(signal => `
+                        <div class="card">
+                            <div class="card-title">${signal.item.replace(/_/g, ' ').toUpperCase()} - ${signal.type}</div>
+                            <p>${signal.reason || 'Trading opportunity detected'}</p>
+                            <p>Confidence: ${Math.round((signal.confidence || 0) * 100)}%</p>
                         </div>
-                    `).join('');
-
+                    `).join('') || '<div class="card">No active signals</div>';
                 document.getElementById('trading-signals').textContent = signals.length;
             } catch (error) {
-                console.error('Failed to load signals:', error);
+                document.getElementById('signals-list').innerHTML = '<div class="card">Error loading signals</div>';
             }
         }
 
@@ -1011,47 +418,29 @@
             try {
                 const response = await fetch(`${API_BASE_URL}/patterns`);
                 const patterns = await response.json();
-
-                const grid = document.getElementById('patterns-grid');
-                if (!patterns.length) {
-                    grid.innerHTML = '<div class="card"><p style="color: var(--text-muted);">No patterns detected</p></div>';
-                    return;
-                }
-
-                grid.innerHTML = patterns.slice(0, 6).map((pattern, index) => {
-                    let content = '';
+                const list = document.getElementById('patterns-list');
+                list.innerHTML = patterns.slice(0, 4).map(pattern => {
+                    let content = `<div class="card-title">${pattern.type.toUpperCase()}</div>`;
                     if (pattern.type === 'correlation') {
-                        content = `
-                                <span class="pattern-type">Correlation</span>
-                                <h3 class="card-title">${pattern.item1} ↔ ${pattern.item2}</h3>
-                                <p>Strength: ${(pattern.strength * 100).toFixed(0)}%</p>
-                            `;
-                    } else if (pattern.type === 'surge' || pattern.type === 'crash') {
-                        content = `
-                                <span class="pattern-type">${pattern.type}</span>
-                                <h3 class="card-title">${pattern.item.replace(/_/g, ' ').toUpperCase()}</h3>
-                                <p>Change: ${pattern.change}%</p>
-                            `;
+                        content += `<p>${pattern.item1} ↔ ${pattern.item2} (Strength: ${(pattern.strength * 100).toFixed(0)}%)</p>`;
+                    } else {
+                        content += `<p>${pattern.item.replace(/_/g, ' ').toUpperCase()} (Change: ${pattern.change}%)</p>`;
                     }
-                    return `<div class="card pattern-card" style="--index: ${index + 1};">${content}</div>`;
-                }).join('');
+                    return `<div class="card">${content}</div>`;
+                }).join('') || '<div class="card">No patterns detected</div>';
             } catch (error) {
-                console.error('Failed to load patterns:', error);
+                document.getElementById('patterns-list').innerHTML = '<div class="card">Error loading patterns</div>';
             }
         }
 
         async function loadMetrics() {
             try {
-                const response = await fetch(`${API_BASE_URL}/rpc/get_enhanced_metrics`, {
-                    method: 'POST'
-                });
+                const response = await fetch(`${API_BASE_URL}/rpc/get_enhanced_metrics`, { method: 'POST' });
                 const metrics = await response.json();
-
                 document.getElementById('total-data').textContent = metrics.total_data_points?.toLocaleString() || '0';
                 document.getElementById('active-predictions').textContent = metrics.predictions_made || '0';
 
-                // Load ML accuracy
-                const accResponse = await fetch(`${API_BASE_URL}/predictions?select=accuracy&accuracy=not.is.null&limit=100`);
+                const accResponse = await fetch(`${API_BASE_URL}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
                 const accData = await accResponse.json();
                 if (accData.length) {
                     const avgAccuracy = accData.reduce((sum, item) => sum + item.accuracy, 0) / accData.length;
@@ -1064,81 +453,33 @@
 
         async function initChart() {
             const ctx = document.getElementById('priceChart').getContext('2d');
+            document.getElementById('chart-loading').style.display = 'block';
 
-            // Fetch initial chart data
-            const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
-            const data = await response.json();
+            try {
+                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
+                const data = await response.json();
+                const datasets = processChartData(data);
 
-            const datasets = processChartData(data);
-
-            priceChart = new Chart(ctx, {
-                type: 'line',
-                data: { datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            labels: {
-                                color: '#8892b0',
-                                font: {
-                                    size: 12
-                                }
-                            }
+                priceChart = new Chart(ctx, {
+                    type: 'line',
+                    data: { datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { type: 'time', time: { unit: 'hour' } },
+                            y: { beginAtZero: false }
                         },
-                        tooltip: {
-                            backgroundColor: '#1a1f3a',
-                            titleColor: '#ffffff',
-                            bodyColor: '#8892b0',
-                            borderColor: '#2a3356',
-                            borderWidth: 1,
-                            callbacks: {
-                                label: function (context) {
-                                    return `${context.dataset.label}: ${context.parsed.y}p`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'hour'
-                            },
-                            grid: {
-                                color: '#2a3356',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#8892b0'
-                            }
-                        },
-                        y: {
-                            grid: {
-                                color: '#2a3356',
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#8892b0',
-                                callback: function (value) {
-                                    return value + 'p';
-                                }
-                            }
-                        }
-                    },
-                    animation: {
-                        duration: 2000,
-                        easing: 'easeInOutCubic'
+                        plugins: { legend: { position: 'top' } },
+                        animation: { duration: 1000 } // Light animation
                     }
-                }
-            });
+                });
+            } catch (error) {
+                console.error('Failed to init chart:', error);
+            } finally {
+                document.getElementById('chart-loading').style.display = 'none';
+            }
 
-            // Handle time range buttons
             document.querySelectorAll('.chart-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
@@ -1152,54 +493,42 @@
         function processChartData(data) {
             const itemData = {};
             const cutoffTime = new Date(Date.now() - selectedTimeRange * 60 * 60 * 1000);
-
             data.forEach(item => {
                 const timestamp = new Date(item.timestamp);
-                if (timestamp < cutoffTime) return;
-
-                if (!itemData[item.item]) {
-                    itemData[item.item] = [];
+                if (timestamp >= cutoffTime) {
+                    if (!itemData[item.item]) itemData[item.item] = [];
+                    itemData[item.item].push({ x: timestamp, y: item.sell_median });
                 }
-                itemData[item.item].push({
-                    x: timestamp,
-                    y: item.sell_median
-                });
             });
-
-            const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-
-            return Object.entries(itemData).slice(0, 5).map(([item, data], index) => ({
+            const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444'];
+            return Object.entries(itemData).slice(0, 4).map(([item, points], index) => ({
                 label: item.replace(/_/g, ' ').toUpperCase(),
-                data: data.sort((a, b) => a.x - b.x), // Ensure sorted
+                data: points,
                 borderColor: colors[index % colors.length],
-                backgroundColor: colors[index % colors.length] + '20',
-                borderWidth: 2,
-                tension: 0.4,
-                pointRadius: 0,
-                pointHoverRadius: 8,
-                pointHoverBackgroundColor: colors[index % colors.length],
-                pointHoverBorderColor: '#ffffff',
-                pointHoverBorderWidth: 2
+                borderWidth: 2
             }));
         }
 
         async function updateChart() {
-            const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=1000`);
-            const data = await response.json();
-            const datasets = processChartData(data);
-
-            priceChart.data.datasets = datasets;
-            priceChart.update();
+            document.getElementById('chart-loading').style.display = 'block';
+            try {
+                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
+                const data = await response.json();
+                priceChart.data.datasets = processChartData(data);
+                priceChart.update();
+            } catch (error) {
+                console.error('Failed to update chart:', error);
+            } finally {
+                document.getElementById('chart-loading').style.display = 'none';
+            }
         }
 
         async function updateData() {
-            await Promise.all([
-                loadPrices(),
-                loadSignals(),
-                loadPatterns(),
-                loadMetrics(),
-                updateChart()
-            ]);
+            await loadMetrics();
+            await loadPrices();
+            await loadSignals();
+            await loadPatterns();
+            await updateChart();
         }
     </script>
 </body>

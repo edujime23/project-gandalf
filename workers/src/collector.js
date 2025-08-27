@@ -108,5 +108,5 @@ function median(arr) {
     if (!arr || !arr.length) return null;
     const s = [...arr].sort((a, b) => a - b);
     const m = Math.floor(s.length / 2);
-    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; 
 }

@@ -22,6 +22,7 @@
         }
 
         :root {
+            /* Light Mode Variables */
             --bg-primary: #f8f9fc;
             --bg-secondary: #ffffff;
             --bg-card: #ffffff;
@@ -35,12 +36,28 @@
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
         }
 
+        body.dark {
+            /* Dark Mode Variables */
+            --bg-primary: #0a0e27;
+            --bg-secondary: #151934;
+            --bg-card: #1a1f3a;
+            --text-primary: #ffffff;
+            --text-secondary: #8892b0;
+            --text-muted: #64748b;
+            --accent-primary: #6366f1;
+            --accent-success: #10b981;
+            --accent-danger: #ef4444;
+            --border-color: #2a3356;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             line-height: 1.6;
             font-size: 16px;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         .container {
@@ -57,6 +74,7 @@
             top: 0;
             z-index: 10;
             box-shadow: var(--shadow-sm);
+            transition: background 0.3s ease;
         }
 
         .header-content {
@@ -77,9 +95,10 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.5rem 1rem;
-            background: #f3f4f6;
+            background: var(--bg-card);
             border-radius: 1rem;
             font-size: 0.875rem;
+            transition: background 0.3s ease;
         }
 
         .status-indicator {
@@ -91,6 +110,17 @@
 
         .status-badge.live .status-indicator {
             background: var(--accent-success);
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            margin-left: 1rem;
+            transition: color 0.3s ease;
         }
 
         /* Sections */
@@ -114,6 +144,7 @@
             border: 0;
             border-top: 1px solid var(--border-color);
             margin: 2rem 0;
+            transition: border-color 0.3s ease;
         }
 
         /* Stats */
@@ -131,7 +162,7 @@
             border-radius: 0.75rem;
             padding: 1.5rem;
             box-shadow: var(--shadow-sm);
-            transition: box-shadow 0.2s ease;
+            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
             .stat-card:hover {
@@ -162,7 +193,7 @@
             border-radius: 0.75rem;
             padding: 1.5rem;
             box-shadow: var(--shadow-sm);
-            transition: box-shadow 0.2s ease;
+            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
             .card:hover {
@@ -186,6 +217,7 @@
             max-height: 400px;
             overflow: hidden;
             position: relative;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .chart-toolbar {
@@ -196,16 +228,17 @@
 
         .chart-btn {
             padding: 0.5rem 1rem;
-            background: #f3f4f6;
+            background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
             font-size: 0.875rem;
             cursor: pointer;
             transition: background 0.2s ease;
+            color: var(--text-primary);
         }
 
             .chart-btn:hover {
-                background: #e5e7eb;
+                background: var(--bg-primary);
             }
 
             .chart-btn.active {
@@ -235,8 +268,12 @@
         }
 
             .btn:hover {
-                background: #4338ca;
+                background: #4338ca; /* Light mode hover */
             }
+
+        body.dark .btn:hover {
+            background: #818cf8; /* Dark mode hover */
+        }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -246,14 +283,20 @@
         }
     </style>
 </head>
-<body>
+<body class="dark">
+    <!-- Dark mode default -->
     <!-- Header -->
     <header class="header">
         <div class="header-content container">
             <div class="logo">🧙‍♂️ Gandalf Intelligence</div>
-            <div class="status-badge" id="system-status">
-                <span class="status-indicator"></span>
-                <span>Connecting...</span>
+            <div style="display: flex; align-items: center;">
+                <div class="status-badge" id="system-status">
+                    <span class="status-indicator"></span>
+                    <span>Connecting...</span>
+                </div>
+                <button class="theme-toggle" id="theme-toggle" title="Toggle Theme">
+                    <i class="ri-sun-line" id="theme-icon"></i>
+                </button>
             </div>
         </div>
     </header>
@@ -334,6 +377,45 @@
         let priceChart = null;
         let selectedTimeRange = 6;
         let resizeTimeout;
+
+        // Theme Toggle Logic
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+
+        function setTheme(isDark) {
+            if (isDark) {
+                document.body.classList.add('dark');
+                themeIcon.classList.replace('ri-sun-line', 'ri-moon-line');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                document.body.classList.remove('dark');
+                themeIcon.classList.replace('ri-moon-line', 'ri-sun-line');
+                localStorage.setItem('theme', 'light');
+            }
+            // Update chart colors if initialized
+            if (priceChart) updateChartColors(isDark);
+        }
+
+        // Load saved theme (dark by default)
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme === 'dark');
+
+        themeToggle.addEventListener('click', () => {
+            const isDark = document.body.classList.contains('dark');
+            setTheme(!isDark);
+        });
+
+        // Update chart colors for theme
+        function updateChartColors(isDark) {
+            const textColor = isDark ? '#8892b0' : '#6b7280';
+            const gridColor = isDark ? '#2a3356' : '#e5e7eb';
+            priceChart.options.scales.x.grid.color = gridColor;
+            priceChart.options.scales.x.ticks.color = textColor;
+            priceChart.options.scales.y.grid.color = gridColor;
+            priceChart.options.scales.y.ticks.color = textColor;
+            priceChart.options.plugins.legend.labels.color = textColor;
+            priceChart.update();
+        }
 
         // Debounce function to prevent lag on resize
         function debounce(fn, delay) {
@@ -460,6 +542,10 @@
                 const data = await response.json();
                 const datasets = processChartData(data);
 
+                const isDark = document.body.classList.contains('dark');
+                const textColor = isDark ? '#8892b0' : '#6b7280';
+                const gridColor = isDark ? '#2a3356' : '#e5e7eb';
+
                 priceChart = new Chart(ctx, {
                     type: 'line',
                     data: { datasets },
@@ -467,10 +553,24 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         scales: {
-                            x: { type: 'time', time: { unit: 'hour' } },
-                            y: { beginAtZero: false }
+                            x: {
+                                type: 'time',
+                                time: { unit: 'hour' },
+                                grid: { color: gridColor },
+                                ticks: { color: textColor }
+                            },
+                            y: {
+                                beginAtZero: false,
+                                grid: { color: gridColor },
+                                ticks: { color: textColor }
+                            }
                         },
-                        plugins: { legend: { position: 'top' } },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { color: textColor }
+                            }
+                        },
                         animation: { duration: 1000 } // Light animation
                     }
                 });

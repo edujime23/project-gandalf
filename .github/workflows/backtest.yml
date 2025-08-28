@@ -12,10 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
       - name: Install deps
         run: |
-          pip install pandas==2.3.2 numpy==2.2.6 requests==2.32.5
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
       - name: Run Backtest
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

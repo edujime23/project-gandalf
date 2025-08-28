@@ -3,7 +3,8 @@
 export default {
     async scheduled(event, env, ctx) {
         console.log('Collector: scheduled collection…');
-        ctx.waitUntil(collectMarketData(env, {}));
+        // Kick off the chain from cursor=0
+        ctx.waitUntil(startChain(env));
     },
 
     async fetch(request, env, ctx) {
@@ -11,7 +12,7 @@ export default {
         const cors = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Allow-Headers': 'Content-Type, x-chain-token'
         };
         if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
 
@@ -33,31 +34,68 @@ export default {
         }
 
         if (url.pathname === '/collect') {
-            // Manual controls (HTTP runs have ~30s waitUntil budget; keep it small)
-            // ?limit=30           -> limit number of items processed
-            // ?shards=5&shard=2   -> process 1 shard of the list
-            // ?items=a,b,c        -> override items list completely
-            const params = url.searchParams;
-            const limit = parseInt(params.get('limit') || '', 10);
-            const shards = parseInt(params.get('shards') || '', 10);
-            const shard = parseInt(params.get('shard') || '', 10);
-            const itemsOverride = (params.get('items') || '')
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean);
+            // Self-chain authorization
+            const chainMode = url.searchParams.get('chain') === '1';
+            const token = request.headers.get('x-chain-token') || url.searchParams.get('token');
+            const isChainAuthorized = chainMode && env.CHAIN_TOKEN && token === env.CHAIN_TOKEN;
 
-            ctx.waitUntil(collectMarketData(env, {
-                limit: Number.isFinite(limit) ? limit : undefined,
-                shards: Number.isFinite(shards) ? shards : undefined,
-                shard: Number.isFinite(shard) ? shard : undefined,
-                itemsOverride: itemsOverride.length ? itemsOverride : undefined
-            }));
-            return new Response('Collection started in background.', { status: 202, headers: cors });
+            // Optional manual controls (small tests only; no chaining without token)
+            const params = url.searchParams;
+            const limit = parseInt(params.get('limit') || '', 10);        // manual slice
+            const shards = parseInt(params.get('shards') || '', 10);      // manual shard count
+            const shard = parseInt(params.get('shard') || '', 10);        // manual shard index
+            const itemsOverride = (params.get('items') || '')
+                .split(',').map(s => s.trim()).filter(Boolean);
+
+            const cursor = Math.max(0, parseInt(params.get('cursor') || '0', 10));
+            const session = params.get('session') || randomId();
+            const maxPerInvoke = Number(params.get('max') || env.MAX_ITEMS_PER_INVOCATION || 35);
+
+            const result = await collectMarketDataSegment(env, {
+                cursor,
+                maxPerInvoke,
+                itemsOverride: itemsOverride.length ? itemsOverride : undefined,
+                manualLimit: Number.isFinite(limit) ? limit : undefined,
+                manualShards: Number.isFinite(shards) ? { shards, shard: Number.isFinite(shard) ? shard : 0 } : undefined,
+            });
+
+            // Chain next segment only if authorized and more items remain
+            if (isChainAuthorized && result.nextCursor < result.totalItems) {
+                const nextUrl = new URL((env.SELF_URL || '').trim() || url.origin + '/collect');
+                nextUrl.pathname = '/collect';
+                nextUrl.searchParams.set('chain', '1');
+                nextUrl.searchParams.set('cursor', String(result.nextCursor));
+                nextUrl.searchParams.set('session', session);
+                nextUrl.searchParams.set('max', String(maxPerInvoke));
+                // if itemsOverride present, forward it
+                if (itemsOverride.length) nextUrl.searchParams.set('items', itemsOverride.join(','));
+
+                console.log(`Chaining next segment: ${result.nextCursor}/${result.totalItems}`);
+                ctx.waitUntil(fetch(nextUrl.toString(), {
+                    headers: { 'x-chain-token': env.CHAIN_TOKEN, 'User-Agent': 'Gandalf-Collector/1.6' }
+                }));
+            } else {
+                if (!isChainAuthorized && result.nextCursor < result.totalItems) {
+                    console.log(`Manual run processed ${result.nextCursor}/${result.totalItems}. Use scheduled/chain to complete.`);
+                }
+            }
+
+            return new Response(JSON.stringify({
+                ok: true,
+                processed: result.processedCount,
+                cursor: result.nextCursor,
+                totalItems: result.totalItems,
+                chained: isChainAuthorized && result.nextCursor < result.totalItems
+            }), { status: 202, headers: { ...cors, 'Content-Type': 'application/json' } });
         }
 
         return new Response('Gandalf Collector v1.6 is online.', { status: 200, headers: cors });
     }
 };
+
+function randomId() {
+    return Math.random().toString(16).slice(2) + Date.now().toString(36);
+}
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -82,7 +120,7 @@ async function fetchWithRetry(url, opts = {}, retries = 3, backoffMs = 700) {
     return null;
 }
 
-// Fetch ALL active tracked items (paged), no limit
+// Page through ALL active tracked items
 async function getTrackedItems(env) {
     const cached = await env.MARKET_CACHE.get('tracked_items_all');
     if (cached) { try { return JSON.parse(cached); } catch { } }
@@ -119,7 +157,7 @@ async function getTrackedItems(env) {
         console.error('tracked_items fetch failed:', e.message);
     }
 
-    // fallback if Supabase fails
+    // fallback
     return [
         'octavia_prime_set', 'wisp_prime_set', 'volt_prime_set', 'saryn_prime_set',
         'mesa_prime_set', 'nekros_prime_set', 'nova_prime_set', 'rhino_prime_set',
@@ -141,9 +179,8 @@ function chunk(arr, size) {
 }
 
 function defaultShardIndex() {
-    // round-robin shard by 5-minute window
     const window = Math.floor(Date.now() / (5 * 60 * 1000));
-    return window % 5; // default 5 shards if not specified
+    return window % 5;
 }
 
 async function collectOne(item) {
@@ -181,70 +218,60 @@ async function collectOne(item) {
     };
 }
 
-async function collectMarketData(env, opts = {}) {
-    console.log('ENV CHECK', {
-        has_SUPABASE_URL: !!env.SUPABASE_URL,
-        has_ANON: !!env.SUPABASE_ANON_KEY,
-        has_SERVICE: !!env.SUPABASE_SERVICE_ROLE,
-        has_KV: !!env.MARKET_CACHE
-    });
+// Segment runner (keeps subrequests under limit)
+async function collectMarketDataSegment(env, opts = {}) {
+    const BATCH_SIZE = Number(env.BATCH_SIZE || 5);            // per-batch concurrency
+    const BATCH_PAUSE_MS = Number(env.BATCH_PAUSE_MS || 5000);     // 5s between batches
+    const cursor = Number(opts.cursor || 0);
+    const maxPerInvoke = Number(opts.maxPerInvoke || 35);        // keep under CF subrequest limit
+    const manualLimit = Number(opts.manualLimit || 0);
 
+    // Build item list
     let items = [];
-    if (opts.itemsOverride?.length) {
-        items = opts.itemsOverride;
-    } else {
-        items = await getTrackedItems(env); // ALL active items (no limit)
+    if (opts.itemsOverride?.length) items = opts.itemsOverride.slice();
+    else items = await getTrackedItems(env);
+
+    if (opts.manualShards && opts.manualShards.shards > 1) {
+        const { shards, shard } = opts.manualShards;
+        items = items.filter((_, i) => i % shards === shard);
+    }
+    if (manualLimit > 0) items = items.slice(0, manualLimit);
+
+    const totalItems = items.length;
+    if (cursor >= totalItems) {
+        console.log(`Nothing to do. cursor=${cursor} >= totalItems=${totalItems}`);
+        return { processedCount: 0, nextCursor: cursor, totalItems };
     }
 
-    // Manual limit or shard still honored for /collect testing
-    if (opts.limit && opts.limit > 0) items = items.slice(0, opts.limit);
-    if (opts.shards && opts.shards > 1) {
-        const shardIdx = Number.isFinite(opts.shard) ? opts.shard : defaultShardIndex();
-        items = items.filter((_, i) => (i % opts.shards) === shardIdx);
-        console.log(`Sharding: ${shardIdx + 1}/${opts.shards} -> ${items.length} items`);
-    }
+    // Segment slice (subrequest-safe)
+    const end = Math.min(cursor + maxPerInvoke, totalItems);
+    const segment = items.slice(cursor, end);
 
-    // Tunables (env or defaults)
-    const BATCH_SIZE = Number(env.BATCH_SIZE || 5);             // concurrent requests
-    const BATCH_PAUSE_MS = Number(env.BATCH_PAUSE_MS || 5000);  // 5s between batches
-    const FLUSH_EVERY = Number(env.FLUSH_EVERY || 50);          // flush every N rows
+    console.log(`Segment: cursor=${cursor} end=${end} (size=${segment.length}) of total=${totalItems}`);
 
-    console.log(`Collecting ${items.length} items in batches of ${BATCH_SIZE} with ${BATCH_PAUSE_MS}ms pause`);
-
-    const pending = [];
-    const kvSample = []; // keep last ~50 records for /health
+    const rows = [];
     let processed = 0;
-    let batchIndex = 0;
 
-    for (const batch of chunk(items, BATCH_SIZE)) {
-        batchIndex++;
+    for (const batch of chunk(segment, BATCH_SIZE)) {
         const recs = await Promise.all(batch.map(collectOne));
-        for (const r of recs) {
-            if (!r) continue;
-            pending.push(r);
-            kvSample.push(r);
-            if (kvSample.length > 50) kvSample.splice(0, kvSample.length - 50); // keep tail 50
-        }
+        for (const r of recs) if (r) rows.push(r);
         processed += batch.length;
-
-        if (pending.length >= FLUSH_EVERY) {
-            await storeInSupabase(env, pending.splice(0));
-        }
-
-        // 5s pause between batches to be extra polite with the upstream API
-        await sleep(BATCH_PAUSE_MS);
-        if (batchIndex % 10 === 0) {
-            console.log(`Progress: ${processed}/${items.length} items processed`);
-        }
+        await sleep(BATCH_PAUSE_MS); // polite pause between batches
     }
 
-    // Final flush
-    if (pending.length) await storeInSupabase(env, pending);
+    if (rows.length) {
+        await storeInSupabase(env, rows);
+    }
 
-    // Snapshot for /health (guaranteed to have data if anything was collected)
-    await env.MARKET_CACHE.put('latest_snapshot', JSON.stringify(kvSample), { expirationTtl: 300 });
+    // Small snapshot for /health
+    try {
+        await env.MARKET_CACHE.put('latest_snapshot', JSON.stringify(rows.slice(-50)), { expirationTtl: 300 });
+    } catch (e) {
+        console.error('KV snapshot error:', e);
+    }
 
-    console.log(`Collected ${processed}/${items.length} items; snapshot(${kvSample.length}) saved.`);
+    console.log(`Segment done: processed=${processed}, nextCursor=${end}/${totalItems}`);
+    return { processedCount: processed, nextCursor: end, totalItems };
 }
 
 async function storeInSupabase(env, data) {
@@ -260,18 +287,43 @@ async function storeInSupabase(env, data) {
             headers: {
                 'Content-Type': 'application/json',
                 'apikey': env.SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${auth}`, // service role recommended (bypasses RLS)
+                'Authorization': `Bearer ${auth}`,
                 'Prefer': 'return=minimal,resolution=merge-duplicates'
             },
             body: JSON.stringify(data)
         });
         if (!resp.ok) {
             const text = await resp.text().catch(() => '');
-            console.error('Supabase write error:', resp.status, text);
+            console.error('Supabase store error:', text || resp.status);
         } else {
             console.log(`Supabase wrote ${data.length} rows`);
         }
     } catch (e) {
         console.error('Supabase store error:', e);
+    }
+}
+
+// Start the chain from a scheduled event
+async function startChain(env) {
+    if (!env.SELF_URL || !env.CHAIN_TOKEN) {
+        console.error('Missing SELF_URL or CHAIN_TOKEN; running a single segment only.');
+        // Fallback: run one segment only (no chaining)
+        await collectMarketDataSegment(env, { cursor: 0, maxPerInvoke: Number(env.MAX_ITEMS_PER_INVOCATION || 35) });
+        return;
+    }
+    const session = randomId();
+    const nextUrl = new URL(env.SELF_URL);
+    nextUrl.pathname = '/collect';
+    nextUrl.searchParams.set('chain', '1');
+    nextUrl.searchParams.set('cursor', '0');
+    nextUrl.searchParams.set('session', session);
+    nextUrl.searchParams.set('max', String(Number(env.MAX_ITEMS_PER_INVOCATION || 35)));
+    console.log(`Starting chain session=${session}`);
+    try {
+        await fetch(nextUrl.toString(), {
+            headers: { 'x-chain-token': env.CHAIN_TOKEN, 'User-Agent': 'Gandalf-Collector/1.6' }
+        });
+    } catch (e) {
+        console.error('Chain start error:', e);
     }
 }

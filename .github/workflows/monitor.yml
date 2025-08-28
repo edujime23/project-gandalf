@@ -1,7 +1,8 @@
 name: Monitor System Health (30m)
 
 on:
-  schedule: [ { cron: '*/30 * * * *' } ]
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:

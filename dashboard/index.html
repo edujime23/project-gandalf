@@ -1,19 +1,14 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gandalf Market Intelligence</title>
     <link rel="icon" href="data:,">
-
-    <!-- Fonts and Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
     <style>
         * {
             margin: 0;
@@ -22,22 +17,6 @@
         }
 
         :root {
-            /* Light Mode Variables */
-            --bg-primary: #f8f9fc;
-            --bg-secondary: #ffffff;
-            --bg-card: #ffffff;
-            --text-primary: #1f2937;
-            --text-secondary: #6b7280;
-            --text-muted: #9ca3af;
-            --accent-primary: #4f46e5;
-            --accent-success: #10b981;
-            --accent-danger: #ef4444;
-            --border-color: #e5e7eb;
-            --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        body.dark {
-            /* Dark Mode Variables */
             --bg-primary: #0a0e27;
             --bg-secondary: #151934;
             --bg-card: #1a1f3a;
@@ -52,584 +31,391 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            line-height: 1.6;
-            font-size: 16px;
-            transition: background 0.3s ease, color 0.3s ease;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 2rem 1rem;
+            padding: 20px;
         }
 
-        /* Header */
-        .header {
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
+        header {
             position: sticky;
             top: 0;
             z-index: 10;
-            box-shadow: var(--shadow-sm);
-            transition: background 0.3s ease;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .header-content {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            padding: 1rem;
+            justify-content: space-between;
+            padding: 12px 20px;
         }
 
         .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
             color: var(--accent-primary);
+            font-weight: 700;
         }
 
         .status-badge {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
+            gap: 8px;
+            font-size: 14px;
             background: var(--bg-card);
-            border-radius: 1rem;
-            font-size: 0.875rem;
-            transition: background 0.3s ease;
+            padding: 6px 10px;
+            border-radius: 999px;
         }
 
-        .status-indicator {
+        .status-dot {
             width: 8px;
             height: 8px;
-            border-radius: 50%;
+            border-radius: 999px;
             background: var(--accent-danger);
         }
 
-        .status-badge.live .status-indicator {
+        .status-badge.live .status-dot {
             background: var(--accent-success);
         }
 
-        /* Theme Toggle */
-        .theme-toggle {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.25rem;
-            color: var(--text-primary);
-            margin-left: 1rem;
-            transition: color 0.3s ease;
-        }
-
-        /* Sections */
         .section {
-            margin-bottom: 3rem;
+            margin-top: 24px;
         }
 
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        hr {
-            border: 0;
-            border-top: 1px solid var(--border-color);
-            margin: 2rem 0;
-            transition: border-color 0.3s ease;
-        }
-
-        /* Stats */
-        .stats-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.5rem;
-        }
-
-        .stat-card {
-            flex: 1;
-            min-width: 200px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-sm);
-            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-            .stat-card:hover {
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-
-        /* Cards */
-        .card-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+            gap: 12px;
         }
 
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
+            border-radius: 10px;
+            padding: 14px;
             box-shadow: var(--shadow-sm);
-            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
             .card:hover {
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.35);
             }
 
-        .card-title {
-            font-size: 1.125rem;
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(260px,1fr));
+            gap: 14px;
+        }
+
+        .item-title {
             font-weight: 600;
-            margin-bottom: 0.5rem;
+            margin-bottom: 6px;
         }
 
-        /* Chart */
-        .chart-container {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-sm);
-            height: 400px; /* Fixed height to prevent expansion */
-            max-height: 400px;
-            overflow: hidden;
-            position: relative;
-            transition: background 0.3s ease, border-color 0.3s ease;
-        }
-
-        .chart-toolbar {
+        .item-line {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
+            justify-content: space-between;
+            color: var(--text-secondary);
+            font-size: 14px;
         }
 
-        .chart-btn {
-            padding: 0.5rem 1rem;
+        .delta-pos {
+            color: var(--accent-success)
+        }
+
+        .delta-neg {
+            color: var(--accent-danger)
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .select {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: background 0.2s ease;
             color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
         }
 
-            .chart-btn:hover {
-                background: var(--bg-primary);
-            }
-
-            .chart-btn.active {
-                background: var(--accent-primary);
-                color: white;
-            }
-
-        .loading-spinner {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 1rem;
-            color: var(--text-secondary);
-        }
-
-        /* Buttons */
         .btn {
-            padding: 0.5rem 1rem;
             background: var(--accent-primary);
-            color: white;
-            border: none;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 12px;
             cursor: pointer;
-            transition: background 0.2s ease;
+            font-size: 14px;
         }
 
-            .btn:hover {
-                background: #4338ca; /* Light mode hover */
+            .btn.secondary {
+                background: transparent;
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
             }
 
-        body.dark .btn:hover {
-            background: #818cf8; /* Dark mode hover */
+        .muted {
+            color: var(--text-muted);
+            font-size: 12px;
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            .stats-container {
-                flex-direction: column;
-            }
+        .chart-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .chart {
+            height: 380px;
+            position: relative;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .grow {
+            flex: 1;
         }
     </style>
 </head>
-<body class="dark">
-    <!-- Dark mode default -->
-    <!-- Header -->
-    <header class="header">
+<body>
+    <header>
         <div class="header-content container">
-            <div class="logo">🧙‍♂️ Gandalf Intelligence</div>
-            <div style="display: flex; align-items: center;">
-                <div class="status-badge" id="system-status">
-                    <span class="status-indicator"></span>
-                    <span>Connecting...</span>
-                </div>
-                <button class="theme-toggle" id="theme-toggle" title="Toggle Theme">
-                    <i class="ri-sun-line" id="theme-icon"></i>
-                </button>
+            <div class="logo">Gandalf Intelligence</div>
+            <div class="row">
+                <div class="status-badge" id="statusBadge"><span class="status-dot"></span><span id="statusText">Connecting</span></div>
+                <button class="btn secondary" id="refreshBtn">Refresh</button>
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
     <main class="container">
-        <!-- Key Metrics Section -->
         <section class="section">
-            <h2 class="section-title">Key Metrics</h2>
-            <div class="stats-container">
-                <div class="stat-card">
-                    <div class="stat-label">Total Data Points</div>
-                    <div class="stat-value" id="total-data">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Active Predictions</div>
-                    <div class="stat-value" id="active-predictions">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Model Accuracy</div>
-                    <div class="stat-value" id="model-accuracy">0%</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Trading Signals</div>
-                    <div class="stat-value" id="trading-signals">0</div>
-                </div>
+            <div class="stats-row">
+                <div class="card"><div class="stat-label">Total Data Points</div><div class="stat-value" id="totalData">0</div></div>
+                <div class="card"><div class="stat-label">Active Predictions</div><div class="stat-value" id="activePreds">0</div></div>
+                <div class="card"><div class="stat-label">Model Accuracy</div><div class="stat-value" id="modelAcc">0%</div></div>
+                <div class="card"><div class="stat-label">Trading Signals</div><div class="stat-value" id="signalCount">0</div></div>
             </div>
+            <div class="muted" id="lastUpdated" style="margin-top:6px;">Last updated: --</div>
         </section>
 
-        <hr>
-
-        <!-- Live Market Prices Section -->
         <section class="section">
-            <div class="section-header">
-                <h2 class="section-title">Live Market Prices</h2>
-                <button class="btn" onclick="loadPrices()">Refresh</button>
+            <div class="row toolbar">
+                <div class="grow"><h3>Tracked Items</h3></div>
+                <div class="muted">Show latest price and predicted next price</div>
             </div>
-            <div class="card-list" id="prices-list"></div>
+            <div class="grid" id="itemsGrid"></div>
         </section>
 
-        <hr>
-
-        <!-- Active Trading Signals Section -->
         <section class="section">
-            <h2 class="section-title">Active Trading Signals</h2>
-            <div class="card-list" id="signals-list"></div>
-        </section>
-
-        <hr>
-
-        <!-- Discovered Patterns Section -->
-        <section class="section">
-            <h2 class="section-title">Discovered Patterns</h2>
-            <div class="card-list" id="patterns-list"></div>
-        </section>
-
-        <hr>
-
-        <!-- Price Trends Section -->
-        <section class="section">
-            <h2 class="section-title">Price Trends</h2>
-            <div class="chart-container">
-                <div class="chart-toolbar">
-                    <button class="chart-btn active" data-range="6">6H</button>
-                    <button class="chart-btn" data-range="24">24H</button>
-                    <button class="chart-btn" data-range="72">3D</button>
-                    <button class="chart-btn" data-range="168">7D</button>
-                    <button class="chart-btn" data-range="720">30D</button>
+            <div class="chart-wrap">
+                <div class="row toolbar">
+                    <select id="itemSelect" class="select"></select>
+                    <div class="grow"></div>
+                    <button class="btn secondary rangeBtn" data-range="6">6H</button>
+                    <button class="btn secondary rangeBtn" data-range="24">24H</button>
+                    <button class="btn secondary rangeBtn" data-range="72">3D</button>
+                    <button class="btn secondary rangeBtn" data-range="168">7D</button>
+                    <button class="btn secondary rangeBtn" data-range="720">30D</button>
                 </div>
-                <canvas id="priceChart"></canvas>
-                <div class="loading-spinner" id="chart-loading">Loading chart...</div>
+                <div class="chart"><canvas id="priceChart"></canvas></div>
             </div>
         </section>
     </main>
 
     <script>
-        const API_BASE_URL = '/api';
-        let priceChart = null;
-        let selectedTimeRange = 6;
-        let resizeTimeout;
+        const API = '/api';
+        let CHART = null;
+        let RANGE = 24;
+        let ITEMS = [];
+        let PRED_MAP = new Map();
 
-        // Theme Toggle Logic
-        const themeToggle = document.getElementById('theme-toggle');
-        const themeIcon = document.getElementById('theme-icon');
-
-        function setTheme(isDark) {
-            if (isDark) {
-                document.body.classList.add('dark');
-                themeIcon.classList.replace('ri-sun-line', 'ri-moon-line');
-                localStorage.setItem('theme', 'dark');
-            } else {
-                document.body.classList.remove('dark');
-                themeIcon.classList.replace('ri-moon-line', 'ri-sun-line');
-                localStorage.setItem('theme', 'light');
-            }
-            // Update chart colors if initialized
-            if (priceChart) updateChartColors(isDark);
+        function setStatus(ok) {
+            const badge = document.getElementById('statusBadge');
+            const text = document.getElementById('statusText');
+            if (ok) { badge.classList.add('live'); text.textContent = 'Online'; }
+            else { badge.classList.remove('live'); text.textContent = 'Offline'; }
         }
 
-        // Load saved theme (dark by default)
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        setTheme(savedTheme === 'dark');
-
-        themeToggle.addEventListener('click', () => {
-            const isDark = document.body.classList.contains('dark');
-            setTheme(!isDark);
-        });
-
-        // Update chart colors for theme
-        function updateChartColors(isDark) {
-            const textColor = isDark ? '#8892b0' : '#6b7280';
-            const gridColor = isDark ? '#2a3356' : '#e5e7eb';
-            priceChart.options.scales.x.grid.color = gridColor;
-            priceChart.options.scales.x.ticks.color = textColor;
-            priceChart.options.scales.y.grid.color = gridColor;
-            priceChart.options.scales.y.ticks.color = textColor;
-            priceChart.options.plugins.legend.labels.color = textColor;
-            priceChart.update();
-        }
-
-        // Debounce function to prevent lag on resize
-        function debounce(fn, delay) {
-            return function () {
-                clearTimeout(resizeTimeout);
-                resizeTimeout = setTimeout(fn, delay);
-            };
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeApp();
-            setInterval(updateData, 60000); // Update every 60 seconds
-
-            // Debounced resize handler for chart
-            window.addEventListener('resize', debounce(() => {
-                if (priceChart) priceChart.resize();
-            }, 250));
-        });
-
-        async function initializeApp() {
-            setSystemStatus(true);
-            await loadMetrics();
-            await loadPrices();
-            await loadSignals();
-            await loadPatterns();
-            await initChart();
-        }
-
-        function setSystemStatus(isLive) {
-            const statusEl = document.getElementById('system-status');
-            if (isLive) {
-                statusEl.classList.add('live');
-                statusEl.querySelector('span:last-child').textContent = 'System Online';
-            } else {
-                statusEl.classList.remove('live');
-                statusEl.querySelector('span:last-child').textContent = 'System Offline';
-            }
-        }
-
-        async function loadPrices() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=50`);
-                const data = await response.json();
-                const latestPrices = {};
-                data.forEach(item => {
-                    if (!latestPrices[item.item]) latestPrices[item.item] = item;
-                });
-
-                const list = document.getElementById('prices-list');
-                list.innerHTML = Object.values(latestPrices).slice(0, 4).map(item => `
-                        <div class="card">
-                            <div class="card-title">${item.item.replace(/_/g, ' ').toUpperCase()}</div>
-                            <p>Sell Median: ${item.sell_median}p</p>
-                            <p>Buy Median: ${item.buy_median}p</p>
-                            <p>Spread: ${item.spread}p</p>
-                        </div>
-                    `).join('') || '<div class="card">No data available</div>';
-            } catch (error) {
-                document.getElementById('prices-list').innerHTML = '<div class="card">Error loading prices</div>';
-            }
-        }
-
-        async function loadSignals() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/signals`);
-                const signals = await response.json();
-                const list = document.getElementById('signals-list');
-                list.innerHTML = signals.slice(0, 4).map(signal => `
-                        <div class="card">
-                            <div class="card-title">${signal.item.replace(/_/g, ' ').toUpperCase()} - ${signal.type}</div>
-                            <p>${signal.reason || 'Trading opportunity detected'}</p>
-                            <p>Confidence: ${Math.round((signal.confidence || 0) * 100)}%</p>
-                        </div>
-                    `).join('') || '<div class="card">No active signals</div>';
-                document.getElementById('trading-signals').textContent = signals.length;
-            } catch (error) {
-                document.getElementById('signals-list').innerHTML = '<div class="card">Error loading signals</div>';
-            }
-        }
-
-        async function loadPatterns() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/patterns`);
-                const patterns = await response.json();
-                const list = document.getElementById('patterns-list');
-                list.innerHTML = patterns.slice(0, 4).map(pattern => {
-                    let content = `<div class="card-title">${pattern.type.toUpperCase()}</div>`;
-                    if (pattern.type === 'correlation') {
-                        content += `<p>${pattern.item1} ↔ ${pattern.item2} (Strength: ${(pattern.strength * 100).toFixed(0)}%)</p>`;
-                    } else {
-                        content += `<p>${pattern.item.replace(/_/g, ' ').toUpperCase()} (Change: ${pattern.change}%)</p>`;
-                    }
-                    return `<div class="card">${content}</div>`;
-                }).join('') || '<div class="card">No patterns detected</div>';
-            } catch (error) {
-                document.getElementById('patterns-list').innerHTML = '<div class="card">Error loading patterns</div>';
-            }
+        async function fetchJSON(url, opts = {}) {
+            const r = await fetch(url, opts);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
         }
 
         async function loadMetrics() {
             try {
-                const response = await fetch(`${API_BASE_URL}/rpc/get_enhanced_metrics`, { method: 'POST' });
-                const metrics = await response.json();
-                document.getElementById('total-data').textContent = metrics.total_data_points?.toLocaleString() || '0';
-                document.getElementById('active-predictions').textContent = metrics.predictions_made || '0';
+                const m = await fetchJSON(`${API}/rpc/get_enhanced_metrics`, { method: 'POST' });
+                document.getElementById('totalData').textContent = (m.total_data_points || 0).toLocaleString();
+                document.getElementById('activePreds').textContent = m.predictions_made || 0;
 
-                const accResponse = await fetch(`${API_BASE_URL}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
-                const accData = await accResponse.json();
-                if (accData.length) {
-                    const avgAccuracy = accData.reduce((sum, item) => sum + item.accuracy, 0) / accData.length;
-                    document.getElementById('model-accuracy').textContent = `${(avgAccuracy * 100).toFixed(1)}%`;
+                const acc = await fetchJSON(`${API}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
+                if (acc && acc.length) {
+                    const avg = acc.reduce((s, x) => s + (x.accuracy || 0), 0) / acc.length;
+                    document.getElementById('modelAcc').textContent = (avg * 100).toFixed(1) + '%';
+                } else {
+                    document.getElementById('modelAcc').textContent = '0%';
                 }
-            } catch (error) {
-                console.error('Failed to load metrics:', error);
+
+                const sigs = await fetchJSON(`${API}/signals`);
+                document.getElementById('signalCount').textContent = Array.isArray(sigs) ? sigs.length : 0;
+            } catch (e) {
+                console.warn('metrics error', e);
             }
         }
 
-        async function initChart() {
+        async function loadItemsAndPreds() {
+            // latest market rows
+            const data = await fetchJSON(`${API}/market_data?select=item,sell_median,buy_median,spread,timestamp&order=timestamp.desc&limit=400`);
+            const latest = new Map();
+            for (const row of data) {
+                if (!latest.has(row.item)) latest.set(row.item, row);
+            }
+            ITEMS = Array.from(latest.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // latest predictions
+            const preds = await fetchJSON(`${API}/predictions?order=predicted_at.desc&limit=200`);
+            PRED_MAP.clear();
+            for (const p of preds) if (!PRED_MAP.has(p.item)) PRED_MAP.set(p.item, p);
+
+            // fill itemSelect
+            const sel = document.getElementById('itemSelect');
+            sel.innerHTML = ITEMS.slice(0, 50).map(r => `<option value="${r.item}">${r.item.replace(/_/g, ' ').toUpperCase()}</option>`).join('');
+        }
+
+        function renderItemsGrid() {
+            const grid = document.getElementById('itemsGrid');
+            if (!ITEMS.length) { grid.innerHTML = '<div class="card">No data available</div>'; return; }
+
+            const list = ITEMS.slice(0, 12).map(row => {
+                const pred = PRED_MAP.get(row.item);
+                const predPrice = pred ? Number(pred.predicted_price) : null;
+                const delta = (predPrice !== null) ? (predPrice - Number(row.sell_median)) : null;
+                const deltaClass = delta !== null ? (delta >= 0 ? 'delta-pos' : 'delta-neg') : '';
+                const conf = pred && pred.confidence !== null ? Math.round(pred.confidence * 100) + '%' : '';
+                return `
+          <div class="card">
+            <div class="item-title">${row.item.replace(/_/g, ' ').toUpperCase()}</div>
+            <div class="item-line"><span>Sell Median</span><span>${row.sell_median}p</span></div>
+            <div class="item-line"><span>Buy Median</span><span>${row.buy_median}p</span></div>
+            <div class="item-line"><span>Spread</span><span>${row.spread}p</span></div>
+            ${predPrice !== null ? `
+              <div class="item-line"><span>Predicted</span><span>${predPrice.toFixed(0)}p</span></div>
+              <div class="item-line ${deltaClass}"><span>Delta</span><span>${delta >= 0 ? '+' : ''}${delta.toFixed(0)}p ${conf ? '(' + conf + ')' : ''}</span></div>
+            ` : `<div class="item-line"><span>Predicted</span><span>-</span></div>`}
+          </div>
+        `;
+            }).join('');
+            grid.innerHTML = list;
+        }
+
+        async function loadChartFor(item) {
+            const enc = encodeURIComponent(item);
+            const rows = await fetchJSON(`${API}/market_data?select=timestamp,sell_median&item=eq.${enc}&order=timestamp.asc&limit=1200`);
+            const pred = PRED_MAP.get(item);
+            const labels = rows.map(r => new Date(r.timestamp));
+            const prices = rows.map(r => Number(r.sell_median));
+            const cutoff = new Date(Date.now() - RANGE * 60 * 60 * 1000);
+            const idx0 = labels.findIndex(d => d >= cutoff);
+            const labelsR = idx0 > 0 ? labels.slice(idx0) : labels;
+            const pricesR = idx0 > 0 ? prices.slice(idx0) : prices;
+
             const ctx = document.getElementById('priceChart').getContext('2d');
-            document.getElementById('chart-loading').style.display = 'block';
+            if (CHART) { CHART.destroy(); }
 
-            try {
-                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
-                const data = await response.json();
-                const datasets = processChartData(data);
-
-                const isDark = document.body.classList.contains('dark');
-                const textColor = isDark ? '#8892b0' : '#6b7280';
-                const gridColor = isDark ? '#2a3356' : '#e5e7eb';
-
-                priceChart = new Chart(ctx, {
-                    type: 'line',
-                    data: { datasets },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: {
-                                type: 'time',
-                                time: { unit: 'hour' },
-                                grid: { color: gridColor },
-                                ticks: { color: textColor }
-                            },
-                            y: {
-                                beginAtZero: false,
-                                grid: { color: gridColor },
-                                ticks: { color: textColor }
-                            }
-                        },
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                                labels: { color: textColor }
-                            }
-                        },
-                        animation: { duration: 1000 } // Light animation
-                    }
-                });
-            } catch (error) {
-                console.error('Failed to init chart:', error);
-            } finally {
-                document.getElementById('chart-loading').style.display = 'none';
+            const ds = [
+                { label: item.replace(/_/g, ' ').toUpperCase(), data: labelsR.map((t, i) => ({ x: t, y: pricesR[i] })), borderColor: '#6366f1', borderWidth: 2, pointRadius: 0 }
+            ];
+            if (pred && pred.predicted_price) {
+                // predicted point shown at now + horizon (approximate)
+                const lastT = labelsR.length ? labelsR[labelsR.length - 1] : new Date();
+                const futureT = new Date(lastT.getTime() + 30 * 60 * 1000);
+                ds.push({ label: 'Predicted', data: [{ x: futureT, y: Number(pred.predicted_price) }], borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 4, showLine: false });
+                if (pred.predicted_lower != null && pred.predicted_upper != null) {
+                    ds.push({ label: 'Prediction Band', data: [{ x: futureT, y: Number(pred.predicted_lower) }, { x: futureT, y: Number(pred.predicted_upper) }], borderColor: '#94a3b8', pointRadius: 0, borderDash: [4, 4], showLine: true });
+                }
             }
 
-            document.querySelectorAll('.chart-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
-                    selectedTimeRange = parseInt(e.target.dataset.range);
-                    updateChart();
-                });
-            });
-        }
+            const isDark = true;
+            const textColor = isDark ? '#8892b0' : '#6b7280';
+            const gridColor = isDark ? '#2a3356' : '#e5e7eb';
 
-        function processChartData(data) {
-            const itemData = {};
-            const cutoffTime = new Date(Date.now() - selectedTimeRange * 60 * 60 * 1000);
-            data.forEach(item => {
-                const timestamp = new Date(item.timestamp);
-                if (timestamp >= cutoffTime) {
-                    if (!itemData[item.item]) itemData[item.item] = [];
-                    itemData[item.item].push({ x: timestamp, y: item.sell_median });
+            CHART = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: ds },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time', grid: { color: gridColor }, ticks: { color: textColor } },
+                        y: { grid: { color: gridColor }, ticks: { color: textColor } }
+                    },
+                    plugins: { legend: { labels: { color: textColor } } },
+                    animation: { duration: 400 }
                 }
             });
-            const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444'];
-            return Object.entries(itemData).slice(0, 4).map(([item, points], index) => ({
-                label: item.replace(/_/g, ' ').toUpperCase(),
-                data: points,
-                borderColor: colors[index % colors.length],
-                borderWidth: 2
-            }));
         }
 
-        async function updateChart() {
-            document.getElementById('chart-loading').style.display = 'block';
+        async function refreshAll() {
+            setStatus(true);
+            const t0 = Date.now();
             try {
-                const response = await fetch(`${API_BASE_URL}/market_data?order=timestamp.desc&limit=500`);
-                const data = await response.json();
-                priceChart.data.datasets = processChartData(data);
-                priceChart.update();
-            } catch (error) {
-                console.error('Failed to update chart:', error);
+                await loadMetrics();
+                await loadItemsAndPreds();
+                renderItemsGrid();
+                const sel = document.getElementById('itemSelect');
+                if (sel.value) {
+                    await loadChartFor(sel.value);
+                } else if (ITEMS.length) {
+                    sel.value = ITEMS[0].item;
+                    await loadChartFor(ITEMS[0].item);
+                }
+            } catch (e) {
+                console.error(e);
+                setStatus(false);
             } finally {
-                document.getElementById('chart-loading').style.display = 'none';
+                const ts = new Date().toLocaleTimeString();
+                document.getElementById('lastUpdated').textContent = 'Last updated: ' + ts + ' (' + (Date.now() - t0) + ' ms)';
             }
         }
 
-        async function updateData() {
-            await loadMetrics();
-            await loadPrices();
-            await loadSignals();
-            await loadPatterns();
-            await updateChart();
-        }
+        document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('rangeBtn')) {
+                RANGE = parseInt(e.target.dataset.range, 10);
+                document.querySelectorAll('.rangeBtn').forEach(b => b.classList.remove('selected'));
+                e.target.classList.add('selected');
+                const sel = document.getElementById('itemSelect');
+                if (sel.value) loadChartFor(sel.value);
+            }
+        });
+        document.getElementById('itemSelect').addEventListener('change', (e) => loadChartFor(e.target.value));
+
+        refreshAll();
+        setInterval(refreshAll, 60000);
     </script>
 </body>
 </html>

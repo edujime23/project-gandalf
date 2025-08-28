@@ -26,6 +26,7 @@
             --accent-primary: #6366f1;
             --accent-success: #10b981;
             --accent-danger: #ef4444;
+            --accent-warning: #f59e0b;
             --border-color: #2a3356;
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
         }
@@ -83,6 +84,27 @@
             background: var(--accent-success);
         }
 
+        .btn {
+            background: var(--accent-primary);
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+            .btn.secondary {
+                background: transparent;
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+            }
+
+        .muted {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
         .section {
             margin-top: 24px;
         }
@@ -122,12 +144,42 @@
             gap: 14px;
         }
 
-        .item-title {
+        .row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .grow {
+            flex: 1;
+        }
+
+        .tag {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+            .tag.up {
+                color: var(--accent-success);
+                border-color: #0f5132;
+                background: rgba(16,185,129,.08);
+            }
+
+            .tag.down {
+                color: var(--accent-danger);
+                border-color: #842029;
+                background: rgba(239,68,68,.08);
+            }
+
+        .mover-title {
             font-weight: 600;
             margin-bottom: 6px;
         }
 
-        .item-line {
+        .mover-line {
             display: flex;
             justify-content: space-between;
             color: var(--text-secondary);
@@ -135,47 +187,11 @@
         }
 
         .delta-pos {
-            color: var(--accent-success)
+            color: var(--accent-success);
         }
 
         .delta-neg {
-            color: var(--accent-danger)
-        }
-
-        .toolbar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .select {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            padding: 6px 10px;
-            border-radius: 6px;
-        }
-
-        .btn {
-            background: var(--accent-primary);
-            color: #fff;
-            border: 0;
-            border-radius: 6px;
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-            .btn.secondary {
-                background: transparent;
-                color: var(--text-primary);
-                border: 1px solid var(--border-color);
-            }
-
-        .muted {
-            color: var(--text-muted);
-            font-size: 12px;
+            color: var(--accent-danger);
         }
 
         .chart-wrap {
@@ -190,14 +206,50 @@
             position: relative;
         }
 
-        .row {
+        .signals-list .sig {
+            border: 1px solid var(--border-color);
+            background: #151a33;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .sig-head {
             display: flex;
-            gap: 12px;
+            justify-content: space-between;
             align-items: center;
         }
 
-        .grow {
-            flex: 1;
+        .sig-type {
+            font-weight: 700;
+        }
+
+            .sig-type.BUY {
+                color: var(--accent-success);
+            }
+
+            .sig-type.SELL {
+                color: var(--accent-danger);
+            }
+
+        .sig-muted {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 6px;
         }
     </style>
 </head>
@@ -216,43 +268,54 @@
         <section class="section">
             <div class="stats-row">
                 <div class="card"><div class="stat-label">Total Data Points</div><div class="stat-value" id="totalData">0</div></div>
-                <div class="card"><div class="stat-label">Active Predictions</div><div class="stat-value" id="activePreds">0</div></div>
-                <div class="card"><div class="stat-label">Model Accuracy</div><div class="stat-value" id="modelAcc">0%</div></div>
-                <div class="card"><div class="stat-label">Trading Signals</div><div class="stat-value" id="signalCount">0</div></div>
+                <div class="card"><div class="stat-label">Active Predictions (24h)</div><div class="stat-value" id="activePreds">0</div></div>
+                <div class="card"><div class="stat-label">Model Accuracy (last 50)</div><div class="stat-value" id="modelAcc">0%</div></div>
+                <div class="card"><div class="stat-label">Signals (24h)</div><div class="stat-value" id="signalCount">0</div></div>
             </div>
             <div class="muted" id="lastUpdated" style="margin-top:6px;">Last updated: --</div>
         </section>
 
         <section class="section">
             <div class="row toolbar">
-                <div class="grow"><h3>Tracked Items</h3></div>
-                <div class="muted">Show latest price and predicted next price</div>
+                <div class="grow"><h3>Top Predicted Movers</h3></div>
+                <select id="dirSelect" class="select">
+                    <option value="both">Up & Down</option>
+                    <option value="up">Up Only</option>
+                    <option value="down">Down Only</option>
+                </select>
+                <select id="confSelect" class="select">
+                    <option value="0.65">Conf ≥ 0.65</option>
+                    <option value="0.75">Conf ≥ 0.75</option>
+                    <option value="0.85">Conf ≥ 0.85</option>
+                </select>
             </div>
-            <div class="grid" id="itemsGrid"></div>
+            <div class="grid" id="moversGrid"></div>
         </section>
 
         <section class="section">
-            <div class="chart-wrap">
-                <div class="row toolbar">
-                    <select id="itemSelect" class="select"></select>
-                    <div class="grow"></div>
-                    <button class="btn secondary rangeBtn" data-range="6">6H</button>
-                    <button class="btn secondary rangeBtn" data-range="24">24H</button>
-                    <button class="btn secondary rangeBtn" data-range="72">3D</button>
-                    <button class="btn secondary rangeBtn" data-range="168">7D</button>
-                    <button class="btn secondary rangeBtn" data-range="720">30D</button>
-                </div>
-                <div class="chart"><canvas id="priceChart"></canvas></div>
+            <div class="row toolbar">
+                <select id="itemSelect" class="select"></select>
+                <div class="grow"></div>
+                <button class="btn secondary rangeBtn" data-range="6">6H</button>
+                <button class="btn secondary rangeBtn" data-range="24">24H</button>
+                <button class="btn secondary rangeBtn" data-range="72">3D</button>
+                <button class="btn secondary rangeBtn" data-range="168">7D</button>
+                <button class="btn secondary rangeBtn" data-range="720">30D</button>
             </div>
+            <div class="chart-wrap"><div class="chart"><canvas id="priceChart"></canvas></div></div>
+        </section>
+
+        <section class="section">
+            <div class="row"><h3>Live Signals (last 24h)</h3></div>
+            <div id="signalsList" class="signals-list"></div>
         </section>
     </main>
 
     <script>
         const API = '/api';
-        let CHART = null;
-        let RANGE = 24;
-        let ITEMS = [];
-        let PRED_MAP = new Map();
+        let CHART = null, RANGE = 24;
+        let MOVERS = []; // latest movers list
+        const escapeHTML = (s) => String(s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
         function setStatus(ok) {
             const badge = document.getElementById('statusBadge');
@@ -264,6 +327,8 @@
         async function fetchJSON(url, opts = {}) {
             const r = await fetch(url, opts);
             if (!r.ok) throw new Error('HTTP ' + r.status);
+            const ct = r.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) return r.text();
             return r.json();
         }
 
@@ -273,70 +338,92 @@
                 document.getElementById('totalData').textContent = (m.total_data_points || 0).toLocaleString();
                 document.getElementById('activePreds').textContent = m.predictions_made || 0;
 
-                const acc = await fetchJSON(`${API}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
-                if (acc && acc.length) {
+                const acc = await fetchJSON(`${API}/predictions?select=accuracy&accuracy=not.is.null&order=predicted_at.desc&limit=50`);
+                if (Array.isArray(acc) && acc.length) {
                     const avg = acc.reduce((s, x) => s + (x.accuracy || 0), 0) / acc.length;
                     document.getElementById('modelAcc').textContent = (avg * 100).toFixed(1) + '%';
-                } else {
-                    document.getElementById('modelAcc').textContent = '0%';
-                }
+                } else { document.getElementById('modelAcc').textContent = '0%'; }
 
-                const sigs = await fetchJSON(`${API}/signals`);
+                const sigs = await fetchJSON(`${API}/rpc/get_recent_signals`, { method: 'POST', body: JSON.stringify({ limit_n: 200, lookback_hours: 24 }) });
                 document.getElementById('signalCount').textContent = Array.isArray(sigs) ? sigs.length : 0;
+                renderSignals(sigs || []);
             } catch (e) {
                 console.warn('metrics error', e);
             }
         }
 
-        async function loadItemsAndPreds() {
-            // latest market rows
-            const data = await fetchJSON(`${API}/market_data?select=item,sell_median,buy_median,spread,timestamp&order=timestamp.desc&limit=400`);
-            const latest = new Map();
-            for (const row of data) {
-                if (!latest.has(row.item)) latest.set(row.item, row);
-            }
-            ITEMS = Array.from(latest.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-            // latest predictions
-            const preds = await fetchJSON(`${API}/predictions?order=predicted_at.desc&limit=200`);
-            PRED_MAP.clear();
-            for (const p of preds) if (!PRED_MAP.has(p.item)) PRED_MAP.set(p.item, p);
-
-            // fill itemSelect
+        async function loadMovers() {
+            const direction = document.getElementById('dirSelect').value;
+            const min_confidence = parseFloat(document.getElementById('confSelect').value || '0.65');
+            const body = JSON.stringify({ direction, min_confidence, limit_n: 24 });
+            const movers = await fetchJSON(`${API}/rpc/get_top_movers`, { method: 'POST', body });
+            MOVERS = Array.isArray(movers) ? movers : [];
+            renderMovers();
+            // Fill select from movers
             const sel = document.getElementById('itemSelect');
-            sel.innerHTML = ITEMS.slice(0, 50).map(r => `<option value="${r.item}">${r.item.replace(/_/g, ' ').toUpperCase()}</option>`).join('');
+            sel.innerHTML = MOVERS.map(r => `<option value="${escapeHTML(r.item)}">${escapeHTML(r.item).replace(/_/g, ' ').toUpperCase()}</option>`).join('');
         }
 
-        function renderItemsGrid() {
-            const grid = document.getElementById('itemsGrid');
-            if (!ITEMS.length) { grid.innerHTML = '<div class="card">No data available</div>'; return; }
-
-            const list = ITEMS.slice(0, 12).map(row => {
-                const pred = PRED_MAP.get(row.item);
-                const predPrice = pred ? Number(pred.predicted_price) : null;
-                const delta = (predPrice !== null) ? (predPrice - Number(row.sell_median)) : null;
-                const deltaClass = delta !== null ? (delta >= 0 ? 'delta-pos' : 'delta-neg') : '';
-                const conf = pred && pred.confidence !== null ? Math.round(pred.confidence * 100) + '%' : '';
+        function renderMovers() {
+            const grid = document.getElementById('moversGrid');
+            if (!MOVERS.length) { grid.innerHTML = '<div class="card">No movers found</div>'; return; }
+            grid.innerHTML = MOVERS.map(row => {
+                const item = escapeHTML(row.item);
+                const cp = Number(row.current_price || 0);
+                const pp = Number(row.predicted_price || 0);
+                const ch = pp - cp;
+                const chPct = (row.predicted_change_pct != null) ? Number(row.predicted_change_pct) : (cp ? (ch / cp * 100) : 0);
+                const cls = chPct >= 0 ? 'delta-pos' : 'delta-neg';
+                const tag = chPct >= 0 ? 'up' : 'down';
+                const conf = row.confidence != null ? Math.round(row.confidence * 100) + '%' : '';
                 return `
-          <div class="card">
-            <div class="item-title">${row.item.replace(/_/g, ' ').toUpperCase()}</div>
-            <div class="item-line"><span>Sell Median</span><span>${row.sell_median}p</span></div>
-            <div class="item-line"><span>Buy Median</span><span>${row.buy_median}p</span></div>
-            <div class="item-line"><span>Spread</span><span>${row.spread}p</span></div>
-            ${predPrice !== null ? `
-              <div class="item-line"><span>Predicted</span><span>${predPrice.toFixed(0)}p</span></div>
-              <div class="item-line ${deltaClass}"><span>Delta</span><span>${delta >= 0 ? '+' : ''}${delta.toFixed(0)}p ${conf ? '(' + conf + ')' : ''}</span></div>
-            ` : `<div class="item-line"><span>Predicted</span><span>-</span></div>`}
-          </div>
-        `;
+            <div class="card mover" data-item="${item}">
+              <div class="row" style="justify-content:space-between;">
+                <div class="mover-title">${item.replace(/_/g, ' ').toUpperCase()}</div>
+                <div class="tag ${tag}">${chPct >= 0 ? 'UP' : 'DOWN'}</div>
+              </div>
+              <div class="mover-line"><span>Current</span><span>${cp}p</span></div>
+              <div class="mover-line"><span>Predicted</span><span>${pp}p</span></div>
+              <div class="mover-line ${cls}"><span>Δ (pct)</span><span>${ch >= 0 ? '+' : ''}${ch.toFixed(0)}p (${chPct >= 0 ? '+' : ''}${chPct.toFixed(1)}%)</span></div>
+              <div class="mover-line"><span>Confidence</span><span>${conf}</span></div>
+            </div>`;
             }).join('');
-            grid.innerHTML = list;
+            // Click to load chart
+            grid.querySelectorAll('.mover').forEach(el => {
+                el.addEventListener('click', () => {
+                    const item = el.getAttribute('data-item');
+                    const sel = document.getElementById('itemSelect');
+                    sel.value = item;
+                    loadChartFor(item);
+                });
+            });
+        }
+
+        function renderSignals(sigs) {
+            const wrap = document.getElementById('signalsList');
+            if (!Array.isArray(sigs) || !sigs.length) {
+                wrap.innerHTML = '<div class="card">No recent signals</div>'; return;
+            }
+            wrap.innerHTML = sigs.slice(0, 20).map(s => {
+                const ts = s.created_at ? new Date(s.created_at).toLocaleString() : '';
+                const conf = s.confidence != null ? Math.round(s.confidence * 100) + '%' : '';
+                const item = escapeHTML(s.item || '');
+                return `
+            <div class="sig">
+              <div class="sig-head">
+                <div><span class="sig-type ${s.type}">${s.type}</span> • <strong>${item.replace(/_/g, ' ').toUpperCase()}</strong></div>
+                <div class="sig-muted">${ts}</div>
+              </div>
+              <div class="sig-muted">${escapeHTML(s.reason || '')}</div>
+              <div class="sig-muted">Confidence: ${conf}</div>
+            </div>`;
+            }).join('');
         }
 
         async function loadChartFor(item) {
             const enc = encodeURIComponent(item);
-            const rows = await fetchJSON(`${API}/market_data?select=timestamp,sell_median&item=eq.${enc}&order=timestamp.asc&limit=1200`);
-            const pred = PRED_MAP.get(item);
+            const rows = await fetchJSON(`${API}/market_data?select=timestamp,sell_median&item=eq.${enc}&order=timestamp.asc&limit=2000`);
+            const pred = (MOVERS || []).find(p => p.item === item);
             const labels = rows.map(r => new Date(r.timestamp));
             const prices = rows.map(r => Number(r.sell_median));
             const cutoff = new Date(Date.now() - RANGE * 60 * 60 * 1000);
@@ -345,13 +432,12 @@
             const pricesR = idx0 > 0 ? prices.slice(idx0) : prices;
 
             const ctx = document.getElementById('priceChart').getContext('2d');
-            if (CHART) { CHART.destroy(); }
+            if (CHART) CHART.destroy();
 
             const ds = [
                 { label: item.replace(/_/g, ' ').toUpperCase(), data: labelsR.map((t, i) => ({ x: t, y: pricesR[i] })), borderColor: '#6366f1', borderWidth: 2, pointRadius: 0 }
             ];
             if (pred && pred.predicted_price) {
-                // predicted point shown at now + horizon (approximate)
                 const lastT = labelsR.length ? labelsR[labelsR.length - 1] : new Date();
                 const futureT = new Date(lastT.getTime() + 30 * 60 * 1000);
                 ds.push({ label: 'Predicted', data: [{ x: futureT, y: Number(pred.predicted_price) }], borderColor: '#10b981', backgroundColor: '#10b981', pointRadius: 4, showLine: false });
@@ -360,10 +446,7 @@
                 }
             }
 
-            const isDark = true;
-            const textColor = isDark ? '#8892b0' : '#6b7280';
-            const gridColor = isDark ? '#2a3356' : '#e5e7eb';
-
+            const textColor = '#8892b0', gridColor = '#2a3356';
             CHART = new Chart(ctx, {
                 type: 'line',
                 data: { datasets: ds },
@@ -374,7 +457,7 @@
                         y: { grid: { color: gridColor }, ticks: { color: textColor } }
                     },
                     plugins: { legend: { labels: { color: textColor } } },
-                    animation: { duration: 400 }
+                    animation: { duration: 350 }
                 }
             });
         }
@@ -384,25 +467,20 @@
             const t0 = Date.now();
             try {
                 await loadMetrics();
-                await loadItemsAndPreds();
-                renderItemsGrid();
+                await loadMovers();
                 const sel = document.getElementById('itemSelect');
-                if (sel.value) {
-                    await loadChartFor(sel.value);
-                } else if (ITEMS.length) {
-                    sel.value = ITEMS[0].item;
-                    await loadChartFor(ITEMS[0].item);
-                }
-            } catch (e) {
-                console.error(e);
-                setStatus(false);
-            } finally {
+                if (sel.value) await loadChartFor(sel.value);
+                else if (MOVERS.length) { sel.value = MOVERS[0].item; await loadChartFor(sel.value); }
+            } catch (e) { console.error(e); setStatus(false); }
+            finally {
                 const ts = new Date().toLocaleTimeString();
                 document.getElementById('lastUpdated').textContent = 'Last updated: ' + ts + ' (' + (Date.now() - t0) + ' ms)';
             }
         }
 
         document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+        document.getElementById('dirSelect').addEventListener('change', refreshAll);
+        document.getElementById('confSelect').addEventListener('change', refreshAll);
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('rangeBtn')) {
                 RANGE = parseInt(e.target.dataset.range, 10);

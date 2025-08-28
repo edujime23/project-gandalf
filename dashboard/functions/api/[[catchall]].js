@@ -20,19 +20,24 @@
     function sanitizeHeaders(h) {
         const drop = new Set(['connection', 'transfer-encoding', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'upgrade']);
         const out = {};
-        for (const [k, v] of h.entries()) {
-            if (!drop.has(k.toLowerCase())) out[k] = v;
-        }
+        for (const [k, v] of h.entries()) if (!drop.has(k.toLowerCase())) out[k] = v;
         return out;
     }
 
     const READ_ONLY = new Set([
         'market_data', 'predictions', 'signals', 'item_parts', 'part_relic_drops',
         'worldstate_fissures', 'worldstate_flags', 'tracked_items', 'daily_performance',
-        'model_performance', 'backtest_results', 'portfolio'
+        'model_performance', 'backtest_results', 'portfolio', 'liquidity_snapshots'
     ]);
 
-    const RPC_ALLOW = new Set(['get_system_metrics', 'get_enhanced_metrics']);
+    const RPC_ALLOW = new Set([
+        'get_system_metrics',
+        'get_enhanced_metrics',
+        'get_latest_predictions',
+        'get_top_movers',
+        'get_recent_signals',
+        // 'insert_worldstate_snapshot' // expose only if you want to call from UI; Worker uses Supabase REST directly
+    ]);
 
     try {
         if (apiPath === 'admin/analyzer/run') {
@@ -78,7 +83,8 @@
                 },
                 body: await request.text()
             });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
+            const headersCombined = { ...corsHeaders, ...sanitizeHeaders(resp.headers) };
+            return new Response(resp.body, { status: resp.status, headers: headersCombined });
         }
 
         const [root] = apiPath.split('?', 1);
@@ -99,6 +105,8 @@
             }
         });
         const headersCombined = { ...corsHeaders, ...sanitizeHeaders(resp.headers) };
+        // Tiny cache hint for GET pass-throughs (safe for charts)
+        headersCombined['Cache-Control'] = headersCombined['Cache-Control'] || 'public, max-age=15, s-maxage=30';
 
         if (!resp.ok) {
             const errorText = await resp.text().catch(() => '');

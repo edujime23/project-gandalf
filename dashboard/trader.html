@@ -1,419 +1,225 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gandalf Trading Terminal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
-
     <style>
-        /* Copy the same modern styles from index.html */
-        /* Plus these trading-specific styles: */
+        :root {
+            --bg-primary: #0a0e27;
+            --bg-secondary: #151934;
+            --bg-card: #1a1f3a;
+            --text-primary: #ffffff;
+            --text-secondary: #8892b0;
+            --border-color: #2a3356;
+            --accent-primary: #6366f1;
+            --accent-success: #10b981;
+            --accent-danger: #ef4444;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(240px,1fr));
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            margin-top: 6px;
+        }
 
         .trading-panel {
             display: grid;
             grid-template-columns: 2fr 1fr;
-            gap: 2rem;
-            margin-bottom: 2rem;
+            gap: 16px;
+            margin-top: 16px;
         }
-
-        .order-book {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-        }
-
-        .order-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-            .order-row.buy {
-                color: var(--accent-success);
-            }
-
-            .order-row.sell {
-                color: var(--accent-danger);
-            }
 
         .position-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
         }
 
         .position-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
         }
 
         .position-pnl {
-            font-size: 1.5rem;
             font-weight: 700;
         }
 
-            .position-pnl.profit {
-                color: var(--accent-success);
-            }
+        .profit {
+            color: var(--accent-success);
+        }
 
-            .position-pnl.loss {
-                color: var(--accent-danger);
-            }
+        .loss {
+            color: var(--accent-danger);
+        }
 
-        .trade-form {
+        .btn {
+            background: var(--accent-primary);
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+
+        .btn-danger {
+            background: var(--accent-danger);
+        }
+
+        .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-label {
-            display: block;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.75rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            color: var(--text-primary);
-            font-size: 1rem;
-        }
-
-            .form-input:focus {
-                outline: none;
-                border-color: var(--accent-primary);
-            }
-
-        .trade-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-top: 1.5rem;
-        }
-
-        .backtest-results {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 1rem;
-            padding: 1.5rem;
-        }
-
-        .metric-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .metric-label {
-            color: var(--text-secondary);
-        }
-
-        .metric-value {
-            font-weight: 600;
-            color: var(--text-primary);
+            border-radius: 10px;
+            padding: 12px;
         }
     </style>
 </head>
 <body>
-    <!-- Copy header from index.html -->
-
     <div class="container">
-        <!-- Performance Overview -->
         <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Total P&L</div>
-                <div class="stat-value" id="total-pnl">+0p</div>
-                <div class="stat-change">
-                    <i class="ri-arrow-up-line"></i>
-                    <span>Today</span>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Win Rate</div>
-                <div class="stat-value" id="win-rate">0%</div>
-                <div class="stat-change">
-                    <i class="ri-arrow-up-line"></i>
-                    <span>Last 7 days</span>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Open Positions</div>
-                <div class="stat-value" id="open-positions">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Sharpe Ratio</div>
-                <div class="stat-value" id="sharpe-ratio">0.00</div>
-            </div>
+            <div class="stat-card"><div class="stat-label">Total PnL</div><div class="stat-value" id="total-pnl">+0p</div></div>
+            <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="win-rate">0%</div></div>
+            <div class="stat-card"><div class="stat-label">Open Positions</div><div class="stat-value" id="open-positions">0</div></div>
+            <div class="stat-card"><div class="stat-label">Sharpe Ratio</div><div class="stat-value" id="sharpe-ratio">0.00</div></div>
         </div>
 
-        <!-- Trading Panel -->
         <div class="trading-panel">
-            <!-- Active Signals & Positions -->
             <div>
-                <div class="section-header">
-                    <h2 class="section-title">
-                        <i class="ri-notification-3-line"></i>
-                        Trading Signals
-                    </h2>
-                </div>
-                <div id="active-signals">
-                    <!-- Signals will be loaded here -->
-                </div>
-
-                <div class="section-header">
-                    <h2 class="section-title">
-                        <i class="ri-briefcase-line"></i>
-                        Open Positions
-                    </h2>
-                </div>
-                <div id="open-positions-list">
-                    <!-- Positions will be loaded here -->
-                </div>
+                <h3>Trading Signals</h3>
+                <div id="active-signals"></div>
+                <h3 style="margin-top:10px;">Open Positions</h3>
+                <div id="open-positions-list"></div>
             </div>
-
-            <!-- Trade Execution -->
             <div>
-                <div class="trade-form">
-                    <h3 style="margin-bottom: 1rem;">Quick Trade</h3>
-                    <div class="form-group">
-                        <label class="form-label">Item</label>
-                        <select class="form-input" id="trade-item">
-                            <option>Select item...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Quantity</label>
-                        <input type="number" class="form-input" id="trade-quantity" value="1">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Price</label>
-                        <input type="number" class="form-input" id="trade-price" placeholder="Market price">
-                    </div>
-                    <div class="trade-buttons">
-                        <button class="btn btn-success" onclick="executeTrade('BUY')">
-                            <i class="ri-shopping-cart-line"></i>
-                            BUY
-                        </button>
-                        <button class="btn btn-danger" onclick="executeTrade('SELL')">
-                            <i class="ri-money-dollar-circle-line"></i>
-                            SELL
-                        </button>
-                    </div>
+                <div class="card">
+                    <h3>Quick Trade (disabled)</h3>
+                    <p style="color:var(--text-secondary); font-size:13px;">Trade execution via UI is disabled on the public dashboard.</p>
+                    <p style="color:var(--text-secondary); font-size:13px;">Signals and positions are read-only.</p>
                 </div>
-
-                <!-- Backtest Results -->
-                <div class="backtest-results" style="margin-top: 2rem;">
-                    <h3 style="margin-bottom: 1rem;">Latest Backtest</h3>
-                    <div id="backtest-metrics">
-                        <div class="metric-row">
-                            <span class="metric-label">Strategy</span>
-                            <span class="metric-value">MA Crossover</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Total Return</span>
-                            <span class="metric-value" style="color: var(--accent-success);">+24.5%</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Max Drawdown</span>
-                            <span class="metric-value" style="color: var(--accent-danger);">-8.3%</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Total Trades</span>
-                            <span class="metric-value">42</span>
-                        </div>
-                    </div>
-                    <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="runBacktest()">
-                        <i class="ri-play-line"></i>
-                        Run New Backtest
-                    </button>
+                <div class="card" style="margin-top:10px;">
+                    <h3>Latest Backtest</h3>
+                    <div id="backtest-metrics">Loading...</div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Enhanced trading dashboard JavaScript
-        const API_BASE_URL = '/api';
+        const API = '/api';
 
-        async function loadTradingData() {
-            await Promise.all([
-                loadActiveSignals(),
-                loadPositions(),
-                loadBacktestResults(),
-                loadTradingMetrics()
-            ]);
+        async function fetchJSON(url, opts = {}) {
+            const r = await fetch(url, opts);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
         }
 
-        async function loadActiveSignals() {
-            const response = await fetch(`${API_BASE_URL}/signals`);
-            const signals = await response.json();
-
-            const container = document.getElementById('active-signals');
-            container.innerHTML = signals.slice(0, 5).map(signal => `
-                    <div class="position-card">
-                        <div class="position-header">
-                            <div>
-                                <h4>${signal.item.replace(/_/g, ' ').toUpperCase()}</h4>
-                                <p style="color: var(--text-secondary); font-size: 0.875rem;">${signal.reason}</p>
-                            </div>
-                            <button class="btn btn-${signal.type === 'BUY' ? 'success' : 'danger'}"
-                                    onclick="executeSignalTrade('${signal.item}', '${signal.type}')">
-                                Execute ${signal.type}
-                            </button>
-                        </div>
-                        <div style="margin-top: 1rem;">
-                            <span style="color: var(--text-secondary);">Confidence: </span>
-                            <span style="font-weight: 600;">${Math.round(signal.confidence * 100)}%</span>
-                        </div>
-                    </div>
-                `).join('');
+        async function loadSignals() {
+            try {
+                const signals = await fetchJSON(`${API}/signals`);
+                const el = document.getElementById('active-signals');
+                el.innerHTML = (signals || []).slice(0, 8).map(s => {
+                    const c = s.type === 'BUY' ? 'profit' : 'loss';
+                    return `<div class="position-card">
+            <div class="position-header">
+              <div><strong>${s.item.replace(/_/g, ' ').toUpperCase()}</strong><div style="color:#8892b0;font-size:12px;">${s.reason || ''}</div></div>
+              <div class="position-pnl ${c}">${s.type}</div>
+            </div>
+            <div style="color:#8892b0;font-size:12px;">Confidence: ${Math.round((s.confidence || 0) * 100)}%</div>
+          </div>`;
+                }).join('') || '<div class="card">No active signals</div>';
+                document.getElementById('open-positions').textContent = '0';
+            } catch (e) {
+                document.getElementById('active-signals').innerHTML = '<div class="card">Error loading signals</div>';
+            }
         }
 
         async function loadPositions() {
-            // Load from portfolio endpoint
-            const response = await fetch(`${API_BASE_URL}/portfolio`);
-            const positions = await response.json();
-
-            const container = document.getElementById('open-positions-list');
-            if (!positions.length) {
-                container.innerHTML = '<div class="card"><p style="color: var(--text-muted);">No open positions</p></div>';
-                return;
-            }
-
-            container.innerHTML = positions.map(pos => {
-                const pnl = (pos.current_price - pos.avg_buy_price) * pos.quantity;
-                const pnlClass = pnl >= 0 ? 'profit' : 'loss';
-
-                return `
-                        <div class="position-card">
-                            <div class="position-header">
-                                <div>
-                                    <h4>${pos.item.replace(/_/g, ' ').toUpperCase()}</h4>
-                                    <p style="color: var(--text-secondary);">
-                                        ${pos.quantity} @ ${pos.avg_buy_price}p
-                                    </p>
-                                </div>
-                                <div class="position-pnl ${pnlClass}">
-                                    ${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}p
-                                </div>
-                            </div>
-                            <button class="btn btn-danger" style="width: 100%; margin-top: 1rem;"
-                                    onclick="closePosition('${pos.item}')">
-                                Close Position
-                            </button>
-                        </div>
-                    `;
-            }).join('');
-        }
-
-        async function loadBacktestResults() {
-            const response = await fetch(`${API_BASE_URL}/backtest_results?order=created_at.desc&limit=1`);
-            const results = await response.json();
-
-            if (results.length) {
-                const latest = results[0];
-                document.getElementById('backtest-metrics').innerHTML = `
-                        <div class="metric-row">
-                            <span class="metric-label">Strategy</span>
-                            <span class="metric-value">${latest.strategy_name}</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Total Return</span>
-                            <span class="metric-value" style="color: ${latest.total_return >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)'};">
-                                ${latest.total_return >= 0 ? '+' : ''}${latest.total_return.toFixed(1)}%
-                            </span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Win Rate</span>
-                            <span class="metric-value">${latest.win_rate.toFixed(1)}%</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Max Drawdown</span>
-                            <span class="metric-value" style="color: var(--accent-danger);">
-                                ${latest.max_drawdown.toFixed(1)}%
-                            </span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Sharpe Ratio</span>
-                            <span class="metric-value">${latest.sharpe_ratio.toFixed(2)}</span>
-                        </div>
-                        <div class="metric-row">
-                            <span class="metric-label">Total Trades</span>
-                            <span class="metric-value">${latest.total_trades}</span>
-                        </div>
-                    `;
-
-                document.getElementById('sharpe-ratio').textContent = latest.sharpe_ratio.toFixed(2);
+            try {
+                const pos = await fetchJSON(`${API}/portfolio`);
+                const el = document.getElementById('open-positions-list');
+                if (!pos.length) { el.innerHTML = '<div class="card">No open positions</div>'; return; }
+                el.innerHTML = pos.map(p => {
+                    const pnl = (p.current_price - p.avg_buy_price) * p.quantity;
+                    const c = pnl >= 0 ? 'profit' : 'loss';
+                    return `<div class="position-card">
+            <div class="position-header">
+              <div><strong>${p.item.replace(/_/g, ' ').toUpperCase()}</strong><div style="color:#8892b0;font-size:12px;">${p.quantity} @ ${p.avg_buy_price}p</div></div>
+              <div class="position-pnl ${c}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}p</div>
+            </div>
+          </div>`;
+                }).join('');
+                document.getElementById('open-positions').textContent = pos.length;
+            } catch (e) {
+                document.getElementById('open-positions-list').innerHTML = '<div class="card">Error loading positions</div>';
             }
         }
 
-        async function loadTradingMetrics() {
-            // Load performance metrics
-            const response = await fetch(`${API_BASE_URL}/rpc/get_enhanced_metrics`, {
-                method: 'POST'
-            });
-            const metrics = await response.json();
-
-            document.getElementById('total-pnl').textContent =
-                `${metrics.last_24h_profit >= 0 ? '+' : ''}${metrics.last_24h_profit.toFixed(0)}p`;
-            document.getElementById('win-rate').textContent =
-                `${metrics.win_rate_7d.toFixed(1)}%`;
-        }
-
-        async function executeTrade(type) {
-            const item = document.getElementById('trade-item').value;
-            const quantity = document.getElementById('trade-quantity').value;
-            const price = document.getElementById('trade-price').value;
-
-            if (!item || !quantity) {
-                alert('Please fill in all fields');
-                return;
+        async function loadBacktest() {
+            try {
+                const res = await fetchJSON(`${API}/backtest_results?order=created_at.desc&limit=1`);
+                const el = document.getElementById('backtest-metrics');
+                if (!res.length) { el.textContent = 'No backtests found'; return; }
+                const r = res[0];
+                document.getElementById('sharpe-ratio').textContent = (r.sharpe_ratio || 0).toFixed(2);
+                el.innerHTML = `
+          <div>Strategy: <strong>${r.strategy_name}</strong></div>
+          <div>Total Return: <strong style="color:${r.total_return >= 0 ? '#10b981' : '#ef4444'};">${r.total_return >= 0 ? '+' : ''}${r.total_return.toFixed(1)}%</strong></div>
+          <div>Win Rate: <strong>${r.win_rate.toFixed(1)}%</strong></div>
+          <div>Max Drawdown: <strong style="color:#ef4444;">${r.max_drawdown.toFixed(1)}%</strong></div>
+          <div>Trades: <strong>${r.total_trades}</strong></div>
+        `;
+            } catch (e) {
+                document.getElementById('backtest-metrics').textContent = 'Error loading backtest';
             }
-
-            const trade = {
-                item,
-                action: type,
-                quantity: parseInt(quantity),
-                price: parseFloat(price) || 0,
-                timestamp: new Date().toISOString()
-            };
-
-            await fetch(`${API_BASE_URL}/trades`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(trade)
-            });
-
-            await loadTradingData();
         }
 
-        async function runBacktest() {
-            alert('Starting backtest... This may take a few minutes.');
-            // Trigger GitHub Action or run locally
-            window.open('/api/admin/run-backtest', '_blank');
+        async function loadMetrics() {
+            try {
+                const m = await fetchJSON(`${API}/rpc/get_enhanced_metrics`, { method: 'POST' });
+                document.getElementById('total-pnl').textContent = (m.last_24h_profit >= 0 ? '+' : '') + (m.last_24h_profit || 0).toFixed(0) + 'p';
+                document.getElementById('win-rate').textContent = (m.win_rate_7d || 0).toFixed(1) + '%';
+            } catch (e) { }
         }
 
-        // Initialize
-        loadTradingData();
-        setInterval(loadTradingData, 30000); // Update every 30 seconds
+        (async function init() {
+            await Promise.all([loadSignals(), loadPositions(), loadBacktest(), loadMetrics()]);
+        })();
     </script>
 </body>
 </html>

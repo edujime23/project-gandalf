@@ -9,3 +9,6 @@ crons = ["*/15 * * * *"]
 [[kv_namespaces]]
 binding = "PATTERN_CACHE"
 id = "a20a59448ed343be8b13f98a2b1b0031"
+
+[observability.logs]
+enabled = true

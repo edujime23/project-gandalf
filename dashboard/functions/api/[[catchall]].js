@@ -1,5 +1,4 @@
-// Cloudflare Pages Function: API Gateway
-export async function onRequest(context) {
+﻿export async function onRequest(context) {
     const { request, env } = context;
     const url = new URL(request.url);
     const apiPath = url.pathname.replace('/api/', '');
@@ -18,8 +17,17 @@ export async function onRequest(context) {
         return new Response(null, { status: 204, headers: corsHeaders });
     }
 
+    function sanitizeHeaders(h) {
+        const drop = new Set(['connection', 'transfer-encoding', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'upgrade']);
+        const out = {};
+        for (const [k, v] of h.entries()) {
+            if (!drop.has(k.toLowerCase())) out[k] = v;
+        }
+        return out;
+    }
+
     try {
-        // Protected: run analyzer now (uses ADMIN_TOKEN)
+        // Protected: run analyzer now
         if (apiPath === 'admin/analyzer/run') {
             const token = request.headers.get('x-admin-token') || url.searchParams.get('token');
             if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
@@ -27,10 +35,9 @@ export async function onRequest(context) {
                     status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
-            // Forward query string to analyzer (so you can use ?force=1)
             const targetUrl = `${ANALYZER_URL}/api/run-now${url.search}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
         // 1) ML predictions direct from Supabase
@@ -44,7 +51,7 @@ export async function onRequest(context) {
                     'Content-Type': 'application/json'
                 }
             });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
         // 2) Signals from DB
@@ -58,17 +65,17 @@ export async function onRequest(context) {
                     'Content-Type': 'application/json'
                 }
             });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // 3) Analyzer-backed endpoints
+        // 3) Analyzer-backed
         if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
             const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...Object.fromEntries(resp.headers) } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // 4) Default: forward to Supabase REST
+        // 4) Default → Supabase REST passthrough
         const targetUrl = `${SUPABASE_URL}/rest/v1/${apiPath}${url.search}`;
         const requestOptions = {
             method: request.method,
@@ -85,10 +92,10 @@ export async function onRequest(context) {
         }
 
         const resp = await fetch(targetUrl, requestOptions);
-        const headersCombined = { ...corsHeaders, ...Object.fromEntries(resp.headers) };
+        const headersCombined = { ...corsHeaders, ...sanitizeHeaders(resp.headers) };
 
         if (!resp.ok) {
-            const errorText = await resp.text();
+            const errorText = await resp.text().catch(() => '');
             console.error(`Upstream error ${resp.status}: ${errorText}`);
             return new Response(JSON.stringify({ error: `Upstream service error: ${resp.status}` }), {
                 status: resp.status,

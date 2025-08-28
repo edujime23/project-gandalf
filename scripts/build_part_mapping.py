@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import os
 import re
 import json
@@ -15,43 +17,46 @@ WFS_BASE = "https://api.warframestat.us"
 HDR_WM = {"User-Agent": "Gandalf/1.0", "Accept": "application/json"}
 HDR_SB = {
     "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Authorization": "Bearer " + str(SUPABASE_KEY),
     "Content-Type": "application/json",
     "Prefer": "return=minimal,resolution=merge-duplicates"
 }
 
+
 def get_tracked_sets(limit=200):
-    url = f"{SUPABASE_URL}/rest/v1/tracked_items?select=item,score,active&order=score.desc&limit={limit}"
+    url = "{0}/rest/v1/tracked_items?select=item,score,active&order=score.desc&limit={1}".format(
+        SUPABASE_URL, int(limit)
+    )
     r = requests.get(url, headers=HDR_SB, timeout=30)
     r.raise_for_status()
     rows = r.json()
-    # only sets
-    return [x["item"] for x in rows if x["item"].endswith("_set")]
+    return [x["item"] for x in rows if isinstance(x.get("item"), str) and x["item"].endswith("_set")]
 
-def get_items_in_set(url_name: str):
-    r = requests.get(f"{WF_BASE}/items/{url_name}", headers=HDR_WM, timeout=30)
+
+def get_items_in_set(url_name):
+    r = requests.get("{0}/items/{1}".format(WF_BASE, url_name), headers=HDR_WM, timeout=30)
     if not r.ok:
         return []
     data = r.json()
-    items = data.get("payload", {}).get("item", {}).get("items_in_set", []) or []
+    items = (data.get("payload") or {}).get("item", {}).get("items_in_set", []) or []
     parts = []
     for it in items:
-        iname = it.get("item_name") or it.get("en", {}).get("item_name") or it.get("url_name")
+        iname = it.get("item_name") or (it.get("en") or {}).get("item_name") or it.get("url_name")
         iurl = it.get("url_name")
         if not iname or not iurl:
             continue
-        # Skip the aggregate "set" row itself
         if iurl == url_name:
-            continue
+            continue  # skip the aggregate set row
         parts.append({"item_name": iname, "url_name": iurl})
     return parts
+
 
 def parse_relic_drop(entry):
     """
     WarframeStat.us /drops/search returns entries with fields:
-    - place: e.g., "Meso E4 Relic (Intact)" or "Meso E4 Relic (Radiant)"
-    - rarity: "Common"/"Uncommon"/"Rare"
-    - chance: percentage string/number
+      - place: e.g., "Meso E4 Relic (Intact)" or "Meso E4 Relic (Radiant)"
+      - rarity: "Common" | "Uncommon" | "Rare"
+      - chance: percentage string or number
     We only take (Intact).
     """
     place = entry.get("place") or ""
@@ -62,12 +67,12 @@ def parse_relic_drop(entry):
         return None
     era = m.group(1)
     code = m.group(2)
-    relic_name = f"{era} {code}"
+    relic_name = "{0} {1}".format(era, code)
     rarity = (entry.get("rarity") or "").strip().lower()
     ch = entry.get("chance")
     try:
         if isinstance(ch, str) and ch.endswith("%"):
-            drop = float(ch.replace("%","").strip()) / 100.0
+            drop = float(ch.replace("%", "").strip()) / 100.0
         elif isinstance(ch, (int, float)):
             drop = float(ch)
             if drop > 1.0:
@@ -80,10 +85,11 @@ def parse_relic_drop(entry):
         return None
     return {"era": era, "relic_name": relic_name, "rarity": rarity, "drop_chance": round(drop, 6)}
 
-def search_drops(part_name: str):
+
+def search_drops(part_name):
     q = urllib.parse.quote(part_name)
-    url = f"{WFS_BASE}/drops/search/{q}"
-    r = requests.get(url, headers={"User-Agent":"Gandalf/1.0"}, timeout=30)
+    url = "{0}/drops/search/{1}".format(WFS_BASE, q)
+    r = requests.get(url, headers={"User-Agent": "Gandalf/1.0"}, timeout=30)
     if not r.ok:
         return []
     data = r.json()
@@ -96,36 +102,38 @@ def search_drops(part_name: str):
             out.append(parsed)
     return out
 
+
 def upsert_item_parts(rows):
     if not rows:
         return
-    url = f"{SUPABASE_URL}/rest/v1/item_parts?on_conflict=set_item,part_item"
+    url = SUPABASE_URL + "/rest/v1/item_parts?on_conflict=set_item,part_item"
     r = requests.post(url, headers=HDR_SB, data=json.dumps(rows), timeout=60)
     r.raise_for_status()
+
 
 def upsert_part_relic_drops(rows):
     if not rows:
         return
-    url = f"{SUPABASE_URL}/rest/v1/part_relic_drops?on_conflict=part_item,relic_name,rarity"
+    url = SUPABASE_URL + "/rest/v1/part_relic_drops?on_conflict=part_item,relic_name,rarity"
     r = requests.post(url, headers=HDR_SB, data=json.dumps(rows), timeout=60)
     r.raise_for_status()
+
 
 def main():
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise SystemExit("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE/KEY")
     sets = get_tracked_sets(limit=200)
-    print(f"Building mapping for {len(sets)} sets…")
+    print("Building mapping for {0} sets...".format(len(sets)))
 
     ip_rows = []
     pr_rows = []
 
     for i, s in enumerate(sets, 1):
         parts = get_items_in_set(s)
-        print(f"[{i}/{len(sets)}] {s}: {len(parts)} parts")
+        print("[{0}/{1}] {2}: {3} parts".format(i, len(sets), s, len(parts)))
         for p in parts:
             ip_rows.append({"set_item": s, "part_item": p["url_name"], "part_name": p["item_name"]})
             drops = search_drops(p["item_name"])
-            # normalize rarity
             for d in drops:
                 pr_rows.append({
                     "part_item": p["url_name"],
@@ -137,19 +145,21 @@ def main():
                 })
             time.sleep(0.25)
 
-        # batch every ~20 sets to avoid large payloads
         if i % 20 == 0:
             if ip_rows:
-                upsert_item_parts(ip_rows); ip_rows.clear()
+                upsert_item_parts(ip_rows)
+                ip_rows = []
             if pr_rows:
-                upsert_part_relic_drops(pr_rows); pr_rows.clear()
+                upsert_part_relic_drops(pr_rows)
+                pr_rows = []
 
     if ip_rows:
-      upsert_item_parts(ip_rows)
+        upsert_item_parts(ip_rows)
     if pr_rows:
-      upsert_part_relic_drops(pr_rows)
+        upsert_part_relic_drops(pr_rows)
 
     print("Mapping build complete.")
+
 
 if __name__ == "__main__":
     main()

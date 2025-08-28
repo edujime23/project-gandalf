@@ -8,16 +8,21 @@ on:
 jobs:
   infer:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    concurrency:
+      group: ml-inference-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
+        with: { python-version: '3.10', cache: 'pip' }
       - name: Install deps
         run: |
-          pip install pandas==2.3.2 numpy==2.2.6 scikit-learn==1.5.2 requests==2.32.5 joblib==1.4.2 python-dateutil==2.9.0.post0
+          pip install pandas==2.3.2 numpy==2.2.6 scikit-learn==1.5.2 requests==2.32.5 joblib==1.4.2 python-dateutil==2.9.0.post0 lightgbm==4.5.0
       - name: Run unified inference
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+          PRED_HORIZON_STEPS: "6"
+          BLEND_WEIGHT: "0.7"
         run: python scripts/infer_unified.py

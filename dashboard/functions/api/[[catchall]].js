@@ -26,8 +26,28 @@
         return out;
     }
 
+    // Whitelist of read-only tables accessible via GET
+    const READ_ONLY = new Set([
+        'market_data',
+        'predictions',
+        'signals',
+        'item_parts',
+        'part_relic_drops',
+        'worldstate_fissures',
+        'worldstate_flags',
+        'tracked_items',
+        'daily_performance',
+        'model_performance'
+    ]);
+
+    // Whitelist of RPC functions allowed from the browser
+    const RPC_ALLOW = new Set([
+        'get_system_metrics',
+        'get_enhanced_metrics'
+    ]);
+
     try {
-        // Protected: run analyzer now
+        // Admin route to run analyzer
         if (apiPath === 'admin/analyzer/run') {
             const token = request.headers.get('x-admin-token') || url.searchParams.get('token');
             if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
@@ -40,64 +60,58 @@
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // 1) ML predictions direct from Supabase
-        if (apiPath.startsWith('ml-predictions')) {
-            const targetUrl = `${SUPABASE_URL}/rest/v1/predictions?order=predicted_at.desc&limit=100${url.search}`;
+        // RPC forwarding (browser-safe)
+        if (apiPath.startsWith('rpc/')) {
+            const fn = apiPath.split('/')[1] || '';
+            if (!RPC_ALLOW.has(fn) || request.method !== 'POST') {
+                return new Response(JSON.stringify({ error: 'Forbidden' }), {
+                    status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
+            const targetUrl = `${SUPABASE_URL}/rest/v1/rpc/${fn}${url.search}`;
             const resp = await fetch(targetUrl, {
+                method: 'POST',
                 headers: {
                     'User-Agent': 'Gandalf-API-Gateway/1.0',
                     'apikey': SUPABASE_KEY,
                     'Authorization': `Bearer ${SUPABASE_KEY}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                body: await request.text()
             });
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // 2) Signals from DB
-        if (apiPath.startsWith('signals-db')) {
-            const targetUrl = `${SUPABASE_URL}/rest/v1/signals?order=created_at.desc&limit=100${url.search}`;
-            const resp = await fetch(targetUrl, {
-                headers: {
-                    'User-Agent': 'Gandalf-API-Gateway/1.0',
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
-        }
-
-        // 3) Analyzer-backed
+        // Analyzer-backed endpoints (cached patterns/signals)
         if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
             const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // 4) Default → Supabase REST passthrough
+        // Read-only REST passthrough
+        // Only allow GET on whitelisted tables
+        const [root] = apiPath.split('?', 1);
+        const table = (root || '').split('/')[0];
+        if (request.method !== 'GET' || !READ_ONLY.has(table)) {
+            return new Response(JSON.stringify({ error: 'Forbidden' }), {
+                status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
         const targetUrl = `${SUPABASE_URL}/rest/v1/${apiPath}${url.search}`;
-        const requestOptions = {
-            method: request.method,
+        const resp = await fetch(targetUrl, {
             headers: {
                 'User-Agent': 'Gandalf-API-Gateway/1.0',
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal'
+                'Content-Type': 'application/json'
             }
-        };
-        if (request.method === 'POST' || request.method === 'PATCH') {
-            requestOptions.body = await request.text();
-        }
-
-        const resp = await fetch(targetUrl, requestOptions);
+        });
         const headersCombined = { ...corsHeaders, ...sanitizeHeaders(resp.headers) };
 
         if (!resp.ok) {
             const errorText = await resp.text().catch(() => '');
-            console.error(`Upstream error ${resp.status}: ${errorText}`);
-            return new Response(JSON.stringify({ error: `Upstream service error: ${resp.status}` }), {
+            return new Response(JSON.stringify({ error: `Upstream service error: ${resp.status}`, body: errorText }), {
                 status: resp.status,
                 headers: { ...headersCombined, 'Content-Type': 'application/json' }
             });
@@ -106,7 +120,6 @@
         return new Response(resp.body, { status: resp.status, headers: headersCombined });
 
     } catch (error) {
-        console.error('Gateway fetch error:', error);
         return new Response(JSON.stringify({ error: 'Gateway internal error' }), {
             status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });

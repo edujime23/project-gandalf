@@ -1,12 +1,13 @@
 ﻿#!/usr/bin/env python
 """
-Unified model trainer (enhanced):
-- Uses market data + worldstate (fissure era weights, Baro) + supply index (relic/rarity/drop)
-- Richer time-series features (EMAs, lags, returns, zscores, spread/depth)
-- GradientBoostingRegressor (portable) with feature importance
-- Saves:
-  - models/unified_model.pkl (model, item_encoder, feature_columns, metadata)
-  - models/unified_metadata.json
+Unified model trainer (v2):
+- Rich features: cyclical time, price/volume/depth/spread, market index,
+  worldstate era weights, supply index, Baro flag
+- Time-series-aware CV with RandomizedSearch
+- LightGBM (if installed) else sklearn GradientBoosting
+- Quantile models for prediction intervals
+- Writes model_performance to Supabase
+- Saves: models/unified_model.pkl, models/unified_metadata.json
 """
 
 import os
@@ -20,34 +21,32 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Tuple, Optional
 
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import TimeSeriesSplit, RandomizedSearchCV
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE") or os.getenv("SUPABASE_KEY")
 
-# Training params
+# Training params (tunable via env)
 DAYS = int(os.getenv("TRAIN_DAYS", "30"))
 PAGE_SIZE = int(os.getenv("PAGE_SIZE", "1000"))
-HORIZON_STEPS = int(os.getenv("PRED_HORIZON_STEPS", "6"))  # 6*5m ≈ 30m
+HORIZON_STEPS = int(os.getenv("PRED_HORIZON_STEPS", "6"))  # 6*5m ~= 30m
 MIN_POINTS_PER_ITEM = int(os.getenv("MIN_POINTS_PER_ITEM", "80"))
-
-FEATURE_COLUMNS_ORDER = [
-    # Time
-    "item_encoded","hour","day_of_week","day_of_month","is_weekend",
-    # Price/volume/depth/spread
-    "price","ema_6","ema_24","ema_72","lag_1","lag_6","lag_24",
-    "ret_1","ret_6","ret_24","zscore_24",
-    "volume","volume_ma_24","volume_ratio","spread","spread_ma","spread_std",
-    "depth","imbalance",
-    # Worldstate + supply
-    "w_lith","w_meso","w_neo","w_axi","baro_active","supply_index"
-]
+N_CV_SPLITS = int(os.getenv("CV_SPLITS", "3"))
+SEARCH_ITER = int(os.getenv("SEARCH_ITER", "20"))
+FEATURES_VERSION = 2  # bump when changing columns
 
 def sb_get(path: str, params=None, headers_extra=None):
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     if headers_extra: headers.update(headers_extra)
     r = requests.get(f"{SUPABASE_URL}{path}", headers=headers, params=params or {}, timeout=30)
+    r.raise_for_status()
+    return r
+
+def sb_post(path: str, body):
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
+    r = requests.post(f"{SUPABASE_URL}{path}", headers=headers, data=json.dumps(body), timeout=60)
     r.raise_for_status()
     return r
 
@@ -84,10 +83,8 @@ def fetch_worldstate(days=DAYS) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     df_f = pd.DataFrame(fiss)
     df_b = pd.DataFrame(flags)
-    if not df_f.empty:
-        df_f["taken_at"] = pd.to_datetime(df_f["taken_at"], utc=True)
-    if not df_b.empty:
-        df_b["taken_at"] = pd.to_datetime(df_b["taken_at"], utc=True)
+    if not df_f.empty: df_f["taken_at"] = pd.to_datetime(df_f["taken_at"], utc=True)
+    if not df_b.empty: df_b["taken_at"] = pd.to_datetime(df_b["taken_at"], utc=True)
     return df_f, df_b
 
 def build_era_weights(df_fiss: pd.DataFrame) -> pd.DataFrame:
@@ -98,56 +95,89 @@ def build_era_weights(df_fiss: pd.DataFrame) -> pd.DataFrame:
         if era not in piv.columns:
             piv[era] = 0
     piv["sum"] = piv[["Lith","Meso","Neo","Axi"]].sum(axis=1)
-    # Avoid divide-by-zero
     for era, col in zip(["Lith","Meso","Neo","Axi"], ["w_lith","w_meso","w_neo","w_axi"]):
         piv[col] = np.where(piv["sum"]>0, piv[era]/piv["sum"], 0.25)
     piv["fissure_total"] = piv["sum"]
-    out = piv[["w_lith","w_meso","w_neo","w_axi","fissure_total"]].reset_index()
-    return out
+    return piv[["w_lith","w_meso","w_neo","w_axi","fissure_total"]].reset_index()
 
-def fetch_supply_index_map(items: List[str], df_weights: pd.DataFrame) -> pd.DataFrame:
-    """
-    Precompute supply_index per item per snapshot by calling SQL locally would be heavy.
-    We approximate using the latest weights per hour to reduce density:
-      - Downsample weights to 1 snapshot per hour and compute indices per item.
-    """
+def compute_market_index(df_all: pd.DataFrame) -> pd.DataFrame:
+    # Average price across items per timestamp
+    idx = df_all.groupby("timestamp")["sell_median"].mean().reset_index().rename(columns={"sell_median":"index_price"})
+    idx = idx.sort_values("timestamp")
+    # Rolling stats
+    roll6 = idx["index_price"].rolling(6, min_periods=1)
+    roll24 = idx["index_price"].rolling(24, min_periods=1)
+    idx["index_ret_6"] = idx["index_price"].pct_change(6)
+    idx["index_ret_24"] = idx["index_price"].pct_change(24)
+    mu24 = roll24.mean()
+    sd24 = roll24.std().replace(0, np.nan)
+    idx["index_zscore_24"] = (idx["index_price"] - mu24) / sd24
+    idx = idx.replace([np.inf, -np.inf], 0).fillna(0)
+    return idx
+
+def fetch_supply_index_map(items: List[str], weights_df: pd.DataFrame) -> pd.DataFrame:
     if not items:
         return pd.DataFrame(columns=["taken_at","item","supply_index"])
-    if df_weights.empty:
-        # default zeros
-        rows = []
-        for it in items:
-            rows.append({"taken_at": pd.Timestamp.utcnow(), "item": it, "supply_index": 0.0})
+    if weights_df.empty:
+        rows = [{"taken_at": pd.Timestamp.utcnow(), "item": it, "supply_index": 0.0} for it in items]
         return pd.DataFrame(rows)
 
-    # Downsample weights (hourly)
-    W = df_weights.copy()
+    W = weights_df.copy()
     W["taken_at_hour"] = W["taken_at"].dt.floor("60min")
     Wh = (W.groupby("taken_at_hour")[["w_lith","w_meso","w_neo","w_axi"]].mean().reset_index()
           .rename(columns={"taken_at_hour":"taken_at"}))
 
-    # Call bulk supply-index via RPC for each snapshot
     rows = []
     for _, rw in Wh.iterrows():
-        era_weights = {
-            "Lith": float(rw["w_lith"]),
-            "Meso": float(rw["w_meso"]),
-            "Neo":  float(rw["w_neo"]),
-            "Axi":  float(rw["w_axi"]),
-        }
-        r = requests.post(
-            f"{SUPABASE_URL}/rest/v1/rpc/get_supply_index_bulk",
-            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"},
-            data=json.dumps({"era_weights": era_weights, "only_active": False, "top_n": 10000}),
-            timeout=60
-        )
-        if not r.ok:
-            continue
+        era_weights = {"Lith": float(rw["w_lith"]), "Meso": float(rw["w_meso"]), "Neo": float(rw["w_neo"]), "Axi": float(rw["w_axi"])}
+        r = sb_post("/rest/v1/rpc/get_supply_index_bulk", {"era_weights": era_weights, "only_active": False, "top_n": 10000})
         data = r.json() or []
         for d in data:
             rows.append({"taken_at": rw["taken_at"], "item": d["set_item"], "supply_index": float(d["supply_index"] or 0)})
-
     return pd.DataFrame(rows)
+
+def build_snapshot_join(weights_df: pd.DataFrame, flags_df: pd.DataFrame, supply_df: pd.DataFrame, index_df: pd.DataFrame, item: str) -> pd.DataFrame:
+    base = weights_df.rename(columns={"taken_at":"timestamp"}).copy()
+    if base.empty:
+        base = pd.DataFrame({
+            "timestamp":[pd.Timestamp.utcnow()],
+            "w_lith":[0.25],"w_meso":[0.25],"w_neo":[0.25],"w_axi":[0.25],
+            "fissure_total":[0]
+        })
+    # Baro flag
+    if not flags_df.empty:
+        fb = flags_df[["taken_at","baro_active"]].rename(columns={"taken_at":"timestamp"}).copy()
+        fb["baro_active"] = fb["baro_active"].astype(int)
+        base = pd.merge_asof(base.sort_values("timestamp"),
+                             fb.sort_values("timestamp"),
+                             on="timestamp", direction="backward", tolerance=pd.Timedelta("12H"))
+    else:
+        base["baro_active"] = 0
+
+    # Supply per item
+    if not supply_df.empty:
+        s = supply_df[supply_df["item"]==item][["taken_at","supply_index"]].rename(columns={"taken_at":"timestamp"})
+        base = pd.merge_asof(base.sort_values("timestamp"),
+                             s.sort_values("timestamp"),
+                             on="timestamp", direction="backward", tolerance=pd.Timedelta("12H"))
+    else:
+        base["supply_index"] = 0.0
+
+    # Market index
+    if not index_df.empty:
+        idx = index_df.copy()
+        base = pd.merge_asof(base.sort_values("timestamp"),
+                             idx.sort_values("timestamp"),
+                             on="timestamp", direction="backward", tolerance=pd.Timedelta("1H"))
+    else:
+        base["index_price"] = 0.0
+        base["index_ret_6"] = 0.0
+        base["index_ret_24"] = 0.0
+        base["index_zscore_24"] = 0.0
+
+    base = base.fillna({"supply_index":0.0, "baro_active":0,
+                        "index_price":0.0, "index_ret_6":0.0, "index_ret_24":0.0, "index_zscore_24":0.0})
+    return base
 
 def add_features(item_df: pd.DataFrame, snapshot_join: pd.DataFrame) -> pd.DataFrame:
     df = item_df.sort_values("timestamp").copy()
@@ -157,16 +187,21 @@ def add_features(item_df: pd.DataFrame, snapshot_join: pd.DataFrame) -> pd.DataF
     buys = df.get("buy_orders",0).fillna(0).astype(float)
     sells = df.get("sell_orders",0).fillna(0).astype(float)
 
-    def ema(series, span):
-        return series.ewm(span=span, adjust=False).mean()
+    def ema(series, span): return series.ewm(span=span, adjust=False).mean()
 
     feat = pd.DataFrame(index=df.index)
-    # Time
+
+    # Time/cyclical
     feat["hour"] = df["timestamp"].dt.hour
     feat["day_of_week"] = df["timestamp"].dt.dayofweek
     feat["day_of_month"] = df["timestamp"].dt.day
     feat["is_weekend"] = (feat["day_of_week"] >= 5).astype(int)
-    # Price/volume
+    feat["hour_sin"] = np.sin(2*np.pi*feat["hour"]/24)
+    feat["hour_cos"] = np.cos(2*np.pi*feat["hour"]/24)
+    feat["dow_sin"] = np.sin(2*np.pi*feat["day_of_week"]/7)
+    feat["dow_cos"] = np.cos(2*np.pi*feat["day_of_week"]/7)
+
+    # Price/volume/depth/spread
     feat["price"] = price
     feat["ema_6"] = ema(price, 6)
     feat["ema_24"] = ema(price, 24)
@@ -174,10 +209,16 @@ def add_features(item_df: pd.DataFrame, snapshot_join: pd.DataFrame) -> pd.DataF
     feat["lag_1"] = price.shift(1)
     feat["lag_6"] = price.shift(6)
     feat["lag_24"] = price.shift(24)
+    feat["lag_48"] = price.shift(48)
+    feat["lag_168"] = price.shift(168)
     feat["ret_1"] = price.pct_change(1)
     feat["ret_6"] = price.pct_change(6)
     feat["ret_24"] = price.pct_change(24)
-    feat["zscore_24"] = (price - price.rolling(24, min_periods=1).mean()) / (price.rolling(24, min_periods=1).std().replace(0,np.nan))
+    feat["ret_48"] = price.pct_change(48)
+    feat["ret_168"] = price.pct_change(168)
+    mu24 = price.rolling(24, min_periods=1).mean()
+    sd24 = price.rolling(24, min_periods=1).std().replace(0, np.nan)
+    feat["zscore_24"] = (price - mu24) / sd24
     feat["volume"] = volume
     feat["volume_ma_24"] = volume.rolling(24, min_periods=1).mean()
     feat["volume_ratio"] = volume / (feat["volume_ma_24"] + 1e-9)
@@ -187,163 +228,218 @@ def add_features(item_df: pd.DataFrame, snapshot_join: pd.DataFrame) -> pd.DataF
     feat["depth"] = buys + sells
     feat["imbalance"] = (buys - sells) / (buys + sells + 1e-9)
 
-    # Join worldstate & supply (nearest snapshot)
-    # snapshot_join columns: timestamp, w_*, baro_active, supply_index
-    merged = pd.merge_asof(
-        df[["timestamp"]].sort_values("timestamp"),
-        snapshot_join.sort_values("timestamp"),
-        left_on="timestamp", right_on="timestamp", direction="backward", tolerance=pd.Timedelta("6H")
-    )
-
-    for c in ["w_lith","w_meso","w_neo","w_axi","baro_active","supply_index"]:
+    # Snapshot join (worldstate + supply + market index)
+    merged = pd.merge_asof(df[["timestamp"]].sort_values("timestamp"),
+                           snapshot_join.sort_values("timestamp"),
+                           on="timestamp", direction="backward", tolerance=pd.Timedelta("6H"))
+    for c in ["w_lith","w_meso","w_neo","w_axi","fissure_total","baro_active",
+              "supply_index","index_price","index_ret_6","index_ret_24","index_zscore_24"]:
         feat[c] = merged[c].values if c in merged.columns else 0.0
 
     # Target
-    target = price.shift(-HORIZON_STEPS).rename("future_price")
+    feat["future_price"] = price.shift(-HORIZON_STEPS)
+    feat = feat.replace([np.inf, -np.inf], np.nan).dropna()
+    return feat
 
-    final = pd.concat([feat, target], axis=1)
-    final = final.replace([np.inf, -np.inf], np.nan).dropna()
-    return final
-
-def build_snapshot_join(weights_df: pd.DataFrame, flags_df: pd.DataFrame, supply_df: pd.DataFrame, item: str) -> pd.DataFrame:
-    if weights_df.empty:
-        base = pd.DataFrame({
-            "timestamp":[pd.Timestamp.utcnow()],
-            "w_lith":[0.25],"w_meso":[0.25],"w_neo":[0.25],"w_axi":[0.25],
-            "baro_active":[0],
-            "supply_index":[0.0]
-        })
-        return base
-    w = weights_df.copy().rename(columns={"taken_at":"timestamp"})
-    # Baro flag nearest
-    if not flags_df.empty:
-        fb = flags_df[["taken_at","baro_active"]].rename(columns={"taken_at":"timestamp"}).copy()
-        fb["baro_active"] = fb["baro_active"].astype(int)
-        w = pd.merge_asof(w.sort_values("timestamp"), fb.sort_values("timestamp"), on="timestamp", direction="backward", tolerance=pd.Timedelta("12H"))
-    else:
-        w["baro_active"] = 0
-
-    # Supply index for item
-    if not supply_df.empty:
-        s = supply_df[supply_df["item"]==item][["taken_at","supply_index"]].rename(columns={"taken_at":"timestamp"})
-        w = pd.merge_asof(w.sort_values("timestamp"), s.sort_values("timestamp"), on="timestamp", direction="backward", tolerance=pd.Timedelta("12H"))
-    else:
-        w["supply_index"] = 0.0
-
-    w["supply_index"] = w["supply_index"].fillna(0.0)
-    w["baro_active"] = w["baro_active"].fillna(0).astype(int)
-    return w[["timestamp","w_lith","w_meso","w_neo","w_axi","baro_active","supply_index"]]
-
-def train_unified_model(df: pd.DataFrame) -> Tuple[GradientBoostingRegressor, LabelEncoder, List[str], Dict]:
-    items = df["item"].dropna().unique().tolist()
-    items.sort()
-    if not items:
-        raise RuntimeError("No items found in training data")
-
-    # Worldstate snapshots and supply index precompute
-    df_fiss, df_flags = fetch_worldstate(days=DAYS)
-    weights_df = build_era_weights(df_fiss)
-    supply_df = fetch_supply_index_map(items, weights_df)
-
-    # Encode items
-    le = LabelEncoder()
-    le.fit(items)
-
-    X_list, y_list = [], []
-    kept_items = 0
-    for item in items:
-        item_df = df[df["item"] == item].copy()
-        if len(item_df) < MIN_POINTS_PER_ITEM:
-            continue
-        code = int(le.transform([item])[0])
-        snap = build_snapshot_join(weights_df, df_flags, supply_df, item)
-        feat = add_features(item_df, snap)
-        if feat.empty or feat["future_price"].isna().all():
-            continue
-        feat.insert(0, "item_encoded", code)
-        X = feat[FEATURE_COLUMNS_ORDER].copy()
-        y = feat["future_price"].copy()
-        if len(X) >= 50:
-            X_list.append(X)
-            y_list.append(y)
-            kept_items += 1
-
-    if not X_list:
-        raise RuntimeError("No items produced valid training features")
-
-    X = pd.concat(X_list, axis=0)
-    y = pd.concat(y_list, axis=0)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, shuffle=True
-    )
-
-    model = GradientBoostingRegressor(
-      n_estimators=600,
-      learning_rate=0.03,
-      max_depth=3,
-      min_samples_split=20,
-      min_samples_leaf=10,
-      subsample=0.8,
-      random_state=42
-    )
-    t0 = time.time()
-    model.fit(X_train, y_train)
-    train_time_s = time.time() - t0
-
-    r2_train = model.score(X_train, y_train)
-    r2_test = model.score(X_test, y_test)
-
-    importances = getattr(model, "feature_importances_", None)
-    feat_importance = []
-    if importances is not None:
-        feat_importance = [
-            {"feature": FEATURE_COLUMNS_ORDER[i], "importance": float(importances[i])}
-            for i in range(len(FEATURE_COLUMNS_ORDER))
-        ]
-        feat_importance.sort(key=lambda d: d["importance"], reverse=True)
-
-    metadata = {
-        "trained_at": datetime.now(timezone.utc).isoformat(),
-        "model_type": "GradientBoostingRegressor",
-        "train_days": DAYS,
-        "horizon_steps": HORIZON_STEPS,
-        "n_samples": int(len(X)),
-        "n_features": int(X.shape[1]),
-        "n_items": int(kept_items),
-        "r2_train": float(r2_train),
-        "r2_test": float(r2_test),
-        "train_time_seconds": round(train_time_s, 2),
-        "feature_importance": feat_importance,
-    }
-
-    return model, le, FEATURE_COLUMNS_ORDER, metadata
+def time_series_train_test_split(X, y, test_size=0.2):
+    split_point = int(len(X) * (1 - test_size))
+    return X.iloc[:split_point], X.iloc[split_point:], y.iloc[:split_point], y.iloc[split_point:]
 
 def main():
-    print("=== Unified Model Trainer (enhanced) ===")
+    print("=== Unified Model Trainer v2 ===")
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise SystemExit("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE/KEY")
 
     print(f"Fetching last {DAYS} days of data…")
-    df = fetch_market_data(DAYS, PAGE_SIZE)
-    if df.empty:
+    df_all = fetch_market_data(DAYS, PAGE_SIZE)
+    if df_all.empty:
         print("No data returned. Aborting.")
         return
-    print(f"Rows: {len(df):,} | Items: {df['item'].nunique()} | Window: {df['timestamp'].min()} → {df['timestamp'].max()}")
+    print(f"Rows: {len(df_all):,} | Items: {df_all['item'].nunique()} | Window: {df_all['timestamp'].min()} → {df_all['timestamp'].max()}")
 
-    model, item_encoder, feature_cols, metadata = train_unified_model(df)
+    # Worldstate & market index
+    df_fiss, df_flags = fetch_worldstate(days=DAYS)
+    weights_df = build_era_weights(df_fiss)
+    index_df = compute_market_index(df_all)
 
+    # Encode items
+    items = sorted(df_all["item"].dropna().unique().tolist())
+    le = LabelEncoder().fit(items)
+
+    # Precompute supply index per item/time
+    supply_df = fetch_supply_index_map(items, weights_df)
+
+    # Build features across items
+    X_list, y_list = [], []
+    kept_items = 0
+    for item in items:
+        item_df = df_all[df_all["item"] == item].copy()
+        if len(item_df) < MIN_POINTS_PER_ITEM:
+            continue
+        snap = build_snapshot_join(weights_df, df_flags, supply_df, index_df, item)
+        feat = add_features(item_df, snap)
+        if feat.empty:
+            continue
+        code = int(le.transform([item])[0])
+        feat.insert(0, "item_encoded", code)
+        X_list.append(feat.drop(columns=["future_price"]))
+        y_list.append(feat["future_price"])
+        kept_items += 1
+
+    if not X_list:
+        print("No valid feature blocks; aborting.")
+        return
+
+    X = pd.concat(X_list, axis=0)
+    y = pd.concat(y_list, axis=0)
+
+    # Define feature columns (strict order)
+    FEATURE_COLUMNS_ORDER = [
+        "item_encoded","hour","day_of_week","day_of_month","is_weekend",
+        "hour_sin","hour_cos","dow_sin","dow_cos",
+        "price","ema_6","ema_24","ema_72",
+        "lag_1","lag_6","lag_24","lag_48","lag_168",
+        "ret_1","ret_6","ret_24","ret_48","ret_168",
+        "zscore_24",
+        "volume","volume_ma_24","volume_ratio",
+        "spread","spread_ma","spread_std",
+        "depth","imbalance",
+        "w_lith","w_meso","w_neo","w_axi","fissure_total","baro_active","supply_index",
+        "index_price","index_ret_6","index_ret_24","index_zscore_24"
+    ]
+    X = X[FEATURE_COLUMNS_ORDER].copy()
+
+    # Time-series split (no leakage)
+    X_train, X_test, y_train, y_test = time_series_train_test_split(X, y, test_size=0.2)
+
+    # Try LightGBM; fallback to sklearn GB
+    use_lgbm = False
+    lgbm = None
+    try:
+        import lightgbm as lgb
+        use_lgbm = True
+    except Exception:
+        pass
+
+    t0 = time.time()
+    if use_lgbm:
+        from scipy.stats import randint, uniform
+        base = __import__("lightgbm").LGBMRegressor(random_state=42, n_estimators=800, learning_rate=0.03, subsample=0.8, colsample_bytree=0.9)
+        param_dist = {
+            "num_leaves": randint(16, 96),
+            "max_depth": randint(3, 10),
+            "min_child_samples": randint(10, 60),
+            "reg_alpha": uniform(0, 0.5),
+            "reg_lambda": uniform(0, 0.8)
+        }
+        tscv = TimeSeriesSplit(n_splits=N_CV_SPLITS)
+        search = RandomizedSearchCV(
+            estimator=base,
+            param_distributions=param_dist,
+            n_iter=SEARCH_ITER,
+            scoring="neg_mean_absolute_error",
+            n_jobs=-1,
+            cv=tscv,
+            refit=True,
+            random_state=42
+        )
+        search.fit(X_train, y_train)
+        model = search.best_estimator_
+        best_params = search.best_params_
+        model_name = "lgbm"
+    else:
+        # GradientBoosting fallback (fast, portable)
+        model = GradientBoostingRegressor(
+            n_estimators=600, learning_rate=0.03, max_depth=3,
+            min_samples_split=20, min_samples_leaf=10, subsample=0.8, random_state=42
+        )
+        model.fit(X_train, y_train)
+        best_params = {k:getattr(model, k) for k in ["n_estimators","learning_rate","max_depth","min_samples_split","min_samples_leaf","subsample"]}
+        model_name = "gbr"
+
+    train_time_s = time.time() - t0
+
+    # Evaluation vs naive baseline
+    y_pred = model.predict(X_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    mape = float(np.mean(np.abs((y_test - y_pred) / (y_test + 1e-9))))
+    r2_train = model.score(X_train, y_train)
+    r2_test = model.score(X_test, y_test)
+
+    # Naive baseline = last observed price
+    baseline = X_test["price"].values
+    baseline_mae = mean_absolute_error(y_test, baseline)
+    baseline_mape = float(np.mean(np.abs((y_test - baseline) / (y_test + 1e-9))))
+
+    # Quantile models for intervals
+    q_low = q_high = None
+    try:
+        if use_lgbm:
+            import lightgbm as lgb
+            common = model.get_params()
+            q_low = lgb.LGBMRegressor(objective="quantile", alpha=0.1, **{k:common[k] for k in common if k in ["num_leaves","max_depth","min_child_samples","learning_rate","n_estimators","subsample","colsample_bytree","reg_alpha","reg_lambda","random_state"]})
+            q_high = lgb.LGBMRegressor(objective="quantile", alpha=0.9, **{k:common[k] for k in common if k in ["num_leaves","max_depth","min_child_samples","learning_rate","n_estimators","subsample","colsample_bytree","reg_alpha","reg_lambda","random_state"]})
+            q_low.fit(X_train, y_train); q_high.fit(X_train, y_train)
+        else:
+            q_low = GradientBoostingRegressor(loss="quantile", alpha=0.1, random_state=42,
+                                              n_estimators=400, learning_rate=0.03, max_depth=3,
+                                              min_samples_split=20, min_samples_leaf=10, subsample=0.8)
+            q_high = GradientBoostingRegressor(loss="quantile", alpha=0.9, random_state=42,
+                                               n_estimators=400, learning_rate=0.03, max_depth=3,
+                                               min_samples_split=20, min_samples_leaf=10, subsample=0.8)
+            q_low.fit(X_train, y_train); q_high.fit(X_train, y_train)
+    except Exception as e:
+        print("Quantile models failed:", e)
+        q_low = q_high = None
+
+    # Save models + metadata
     os.makedirs("models", exist_ok=True)
-    joblib.dump(
-        {"model": model, "item_encoder": item_encoder, "feature_columns": feature_cols, "metadata": metadata},
-        "models/unified_model.pkl"
-    )
+    payload = {
+        "model": model,
+        "quantile_low": q_low,
+        "quantile_high": q_high,
+        "item_encoder": le,
+        "feature_columns": X.columns.tolist(),
+        "metadata": {
+            "trained_at": datetime.now(timezone.utc).isoformat(),
+            "model_name": model_name,
+            "features_version": FEATURES_VERSION,
+            "train_days": DAYS,
+            "horizon_steps": HORIZON_STEPS,
+            "n_samples": int(len(X)),
+            "n_items": int(kept_items),
+            "r2_train": float(r2_train),
+            "r2_test": float(r2_test),
+            "mae_test": float(mae),
+            "mape_test": float(mape),
+            "baseline_mae": float(baseline_mae),
+            "baseline_mape": float(baseline_mape),
+            "train_time_seconds": round(train_time_s, 2),
+            "params": best_params
+        }
+    }
+    joblib.dump(payload, "models/unified_model.pkl")
     with open("models/unified_metadata.json", "w") as f:
-        json.dump(metadata, f, indent=2)
+        json.dump(payload["metadata"], f, indent=2)
 
-    print("Saved: models/unified_model.pkl")
-    print("Saved: models/unified_metadata.json")
-    print(f"R2 (train): {metadata['r2_train']:.4f} | R2 (test): {metadata['r2_test']:.4f}")
+    # Write model_performance
+    try:
+        post = {
+            "model_name": model_name,
+            "features_version": FEATURES_VERSION,
+            "horizon_steps": HORIZON_STEPS,
+            "n_samples": int(len(X)), "n_items": int(kept_items),
+            "r2_train": float(r2_train), "r2_test": float(r2_test),
+            "mae_test": float(mae), "mape_test": float(mape),
+            "baseline_mae": float(baseline_mae), "baseline_mape": float(baseline_mape),
+            "params": best_params
+        }
+        sb_post("/rest/v1/model_performance", post)
+    except Exception as e:
+        print("Failed to write model_performance:", e)
+
+    print(f"Saved models/unified_model.pkl")
+    print(f"R2 train={r2_train:.4f} test={r2_test:.4f} | MAE={mae:.3f} vs baseline {baseline_mae:.3f}")
     print("=== Done ===")
 
 if __name__ == "__main__":

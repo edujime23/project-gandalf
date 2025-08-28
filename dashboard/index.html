@@ -314,7 +314,9 @@
     <script>
         const API = '/api';
         let CHART = null, RANGE = 24;
-        let MOVERS = []; // latest movers list
+        let MOVERS = [];        // movers grid (top predicted deltas)
+        let ALL_TRACKED = [];   // all active tracked items (for the selector)
+
         const escapeHTML = (s) => String(s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 
         function setStatus(ok) {
@@ -332,6 +334,7 @@
             return r.json();
         }
 
+        // 1) Metrics + recent signals
         async function loadMetrics() {
             try {
                 const m = await fetchJSON(`${API}/rpc/get_enhanced_metrics`, { method: 'POST' });
@@ -342,7 +345,9 @@
                 if (Array.isArray(acc) && acc.length) {
                     const avg = acc.reduce((s, x) => s + (x.accuracy || 0), 0) / acc.length;
                     document.getElementById('modelAcc').textContent = (avg * 100).toFixed(1) + '%';
-                } else { document.getElementById('modelAcc').textContent = '0%'; }
+                } else {
+                    document.getElementById('modelAcc').textContent = '0%';
+                }
 
                 const sigs = await fetchJSON(`${API}/rpc/get_recent_signals`, { method: 'POST', body: JSON.stringify({ limit_n: 200, lookback_hours: 24 }) });
                 document.getElementById('signalCount').textContent = Array.isArray(sigs) ? sigs.length : 0;
@@ -352,6 +357,27 @@
             }
         }
 
+        // 2) Load all active tracked items for the selector (not capped by movers)
+        async function loadTrackedItemsSelect() {
+            // Get all active tracked items (up to 1000)
+            const rows = await fetchJSON(`${API}/tracked_items?select=item,active&active=eq.true&order=item.asc&limit=1000`);
+            ALL_TRACKED = Array.isArray(rows) ? rows.map(r => r.item).filter(Boolean) : [];
+
+            const sel = document.getElementById('itemSelect');
+            const prev = sel.value;
+            sel.innerHTML = ALL_TRACKED.map(it => `<option value="${escapeHTML(it)}">${escapeHTML(it).replace(/_/g, ' ').toUpperCase()}</option>`).join('');
+
+            // Preserve prior selection if still present; else default to first mover or first tracked
+            if (prev && ALL_TRACKED.includes(prev)) {
+                sel.value = prev;
+            } else if (MOVERS.length && ALL_TRACKED.includes(MOVERS[0].item)) {
+                sel.value = MOVERS[0].item;
+            } else if (ALL_TRACKED.length) {
+                sel.value = ALL_TRACKED[0];
+            }
+        }
+
+        // 3) Load movers (top predicted changes) — no longer fills the select
         async function loadMovers() {
             const direction = document.getElementById('dirSelect').value;
             const min_confidence = parseFloat(document.getElementById('confSelect').value || '0.65');
@@ -359,9 +385,6 @@
             const movers = await fetchJSON(`${API}/rpc/get_top_movers`, { method: 'POST', body });
             MOVERS = Array.isArray(movers) ? movers : [];
             renderMovers();
-            // Fill select from movers
-            const sel = document.getElementById('itemSelect');
-            sel.innerHTML = MOVERS.map(r => `<option value="${escapeHTML(r.item)}">${escapeHTML(r.item).replace(/_/g, ' ').toUpperCase()}</option>`).join('');
         }
 
         function renderMovers() {
@@ -393,7 +416,7 @@
                 el.addEventListener('click', () => {
                     const item = el.getAttribute('data-item');
                     const sel = document.getElementById('itemSelect');
-                    sel.value = item;
+                    if (ALL_TRACKED.includes(item)) sel.value = item;
                     loadChartFor(item);
                 });
             });
@@ -467,12 +490,14 @@
             const t0 = Date.now();
             try {
                 await loadMetrics();
-                await loadMovers();
+                // Load movers and tracked selector in parallel
+                await Promise.all([loadMovers(), loadTrackedItemsSelect()]);
                 const sel = document.getElementById('itemSelect');
                 if (sel.value) await loadChartFor(sel.value);
-                else if (MOVERS.length) { sel.value = MOVERS[0].item; await loadChartFor(sel.value); }
-            } catch (e) { console.error(e); setStatus(false); }
-            finally {
+                else if (ALL_TRACKED.length) { sel.value = ALL_TRACKED[0]; await loadChartFor(sel.value); }
+            } catch (e) {
+                console.error(e); setStatus(false);
+            } finally {
                 const ts = new Date().toLocaleTimeString();
                 document.getElementById('lastUpdated').textContent = 'Last updated: ' + ts + ' (' + (Date.now() - t0) + ' ms)';
             }

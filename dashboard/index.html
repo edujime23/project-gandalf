@@ -269,29 +269,22 @@
 
         async function loadMetrics() {
             try {
-                const response = await fetch(`${API}/rpc/get_enhanced_metrics`, { method: 'POST' });
-                if (!response.ok) throw new Error('get_enhanced_metrics failed');
-                const metrics = await response.json();
+                const m = await fetchJSON(`${API}/rpc/get_enhanced_metrics`, { method: 'POST' });
+                document.getElementById('totalData').textContent = (m.total_data_points || 0).toLocaleString();
+                document.getElementById('activePreds').textContent = m.predictions_made || 0;
 
-                document.getElementById('total-data').textContent =
-                    (metrics.total_data_points || 0).toLocaleString();
-                document.getElementById('active-predictions').textContent =
-                    metrics.predictions_made || 0;
-
-                // accuracy sample: last 50 predictions with accuracy not null
-                const accResponse = await fetch(`${API}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
-                let avgAccuracyPct = 0;
-                if (accResponse.ok) {
-                    const accData = await accResponse.json();
-                    if (accData && accData.length) {
-                        const avg = accData.reduce((s, x) => s + (Number(x.accuracy) || 0), 0) / accData.length;
-                        avgAccuracyPct = Math.max(0, Math.min(1, avg)) * 100;
-                    }
+                const acc = await fetchJSON(`${API}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
+                if (acc && acc.length) {
+                    const avg = acc.reduce((s, x) => s + (x.accuracy || 0), 0) / acc.length;
+                    document.getElementById('modelAcc').textContent = (avg * 100).toFixed(1) + '%';
+                } else {
+                    document.getElementById('modelAcc').textContent = '0%';
                 }
-                document.getElementById('model-accuracy').textContent = `${avgAccuracyPct.toFixed(1)}%`;
-            } catch (err) {
-                console.warn('loadMetrics error', err);
-                document.getElementById('model-accuracy').textContent = '0%';
+
+                const sigs = await fetchJSON(`${API}/signals`);
+                document.getElementById('signalCount').textContent = Array.isArray(sigs) ? sigs.length : 0;
+            } catch (e) {
+                console.warn('metrics error', e);
             }
         }
 

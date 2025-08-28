@@ -269,7 +269,7 @@
 
         async function loadMetrics() {
             try {
-                const response = await fetch(`${API_BASE_URL}/rpc/get_enhanced_metrics`, { method: 'POST' });
+                const response = await fetch(`${API}/rpc/get_enhanced_metrics`, { method: 'POST' });
                 if (!response.ok) throw new Error('get_enhanced_metrics failed');
                 const metrics = await response.json();
 
@@ -279,7 +279,7 @@
                     metrics.predictions_made || 0;
 
                 // accuracy sample: last 50 predictions with accuracy not null
-                const accResponse = await fetch(`${API_BASE_URL}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
+                const accResponse = await fetch(`${API}/predictions?select=accuracy&accuracy=not.is.null&limit=50`);
                 let avgAccuracyPct = 0;
                 if (accResponse.ok) {
                     const accData = await accResponse.json();

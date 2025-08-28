@@ -26,30 +26,15 @@
         return out;
     }
 
-    // Read-only tables exposed via GET
     const READ_ONLY = new Set([
-        'market_data',
-        'predictions',
-        'signals',
-        'item_parts',
-        'part_relic_drops',
-        'worldstate_fissures',
-        'worldstate_flags',
-        'tracked_items',
-        'daily_performance',
-        'model_performance',
-        'backtest_results',
-        'portfolio'
+        'market_data', 'predictions', 'signals', 'item_parts', 'part_relic_drops',
+        'worldstate_fissures', 'worldstate_flags', 'tracked_items', 'daily_performance',
+        'model_performance', 'backtest_results', 'portfolio'
     ]);
 
-    // RPCs allowed from browser
-    const RPC_ALLOW = new Set([
-        'get_system_metrics',
-        'get_enhanced_metrics'
-    ]);
+    const RPC_ALLOW = new Set(['get_system_metrics', 'get_enhanced_metrics']);
 
     try {
-        // Admin route
         if (apiPath === 'admin/analyzer/run') {
             const token = request.headers.get('x-admin-token') || url.searchParams.get('token');
             if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
@@ -62,7 +47,6 @@
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // Analyzer namespace (explicit)
         if (apiPath.startsWith('analyzer/')) {
             const sub = apiPath.substring('analyzer/'.length);
             const targetUrl = `${ANALYZER_URL}/api/${sub}${url.search ? '?' + url.searchParams.toString() : ''}`;
@@ -70,14 +54,12 @@
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // Analyzer-backed short endpoints (keep signals and patterns only)
         if (apiPath.startsWith('signals') || apiPath.startsWith('patterns')) {
             const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
             const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // RPC browser-safe forwarding (POST only)
         if (apiPath.startsWith('rpc/')) {
             const fn = apiPath.split('/')[1] || '';
             if (!RPC_ALLOW.has(fn) || request.method !== 'POST') {
@@ -99,7 +81,6 @@
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // Default: read-only REST passthrough
         const [root] = apiPath.split('?', 1);
         const table = (root || '').split('/')[0];
         if (request.method !== 'GET' || !READ_ONLY.has(table)) {
@@ -107,6 +88,7 @@
                 status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
+
         const targetUrl = `${SUPABASE_URL}/rest/v1/${apiPath}${url.search}`;
         const resp = await fetch(targetUrl, {
             headers: {

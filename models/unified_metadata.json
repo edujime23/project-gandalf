@@ -1,5 +1,5 @@
 {
-  "trained_at": "2025-08-28T18:17:06.334076+00:00",
+  "trained_at": "2025-08-28T23:11:44.638999+00:00",
   "model_name": "lgbm",
   "features_version": 3,
   "train_days": 30,
@@ -12,7 +12,7 @@
   "mape_test": 0.10164715908443363,
   "baseline_mae": 1.6977011494252874,
   "baseline_mape": 0.0209402516663483,
-  "train_time_seconds": 28.05,
+  "train_time_seconds": 23.25,
   "params": {
     "max_depth": 9,
     "min_child_samples": 28,

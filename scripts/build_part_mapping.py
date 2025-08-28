@@ -48,10 +48,6 @@ def get_items_in_set(url_name):
     return parts
 
 def parse_relic_drop(entry):
-    """
-    Parse intact relic rows from WarframeStat.us /drops/search results.
-    Accepts place strings like: 'Meso E4 Relic (Intact)'.
-    """
     place = entry.get("place") or ""
     if "Relic (Intact)" not in place:
         return None
@@ -132,13 +128,11 @@ def main():
                 })
             time.sleep(0.25)
 
-        # Flush every 20 sets to keep payloads small
         if i % 20 == 0:
             if ip_rows:
                 rpc_upsert_item_parts(ip_rows)
                 ip_rows = []
             if pr_rows:
-                # chunk large arrays
                 chunk = 400
                 for j in range(0, len(pr_rows), chunk):
                     rpc_upsert_part_relic_drops(pr_rows[j:j+chunk])

@@ -33,7 +33,7 @@ export default {
         }
 
         if (url.pathname === '/collect') {
-            // Optional controls for manual runs (HTTP has ~30s wall cap; keep it small)
+            // Manual controls (HTTP runs have ~30s waitUntil budget; keep it small)
             // ?limit=30           -> limit number of items processed
             // ?shards=5&shard=2   -> process 1 shard of the list
             // ?items=a,b,c        -> override items list completely
@@ -55,7 +55,7 @@ export default {
             return new Response('Collection started in background.', { status: 202, headers: cors });
         }
 
-        return new Response('Gandalf Collector v1.5 is online.', { status: 200, headers: cors });
+        return new Response('Gandalf Collector v1.6 is online.', { status: 200, headers: cors });
     }
 };
 
@@ -65,7 +65,6 @@ async function fetchWithRetry(url, opts = {}, retries = 3, backoffMs = 700) {
     for (let i = 0; i < retries; i++) {
         try {
             const resp = await fetch(url, opts);
-            // Respect WM rate limits and transient issues
             if (resp.status === 429 || resp.status >= 500) {
                 await sleep(backoffMs * (i + 1));
                 continue;
@@ -83,34 +82,44 @@ async function fetchWithRetry(url, opts = {}, retries = 3, backoffMs = 700) {
     return null;
 }
 
+// Fetch ALL active tracked items (paged), no limit
 async function getTrackedItems(env) {
-    const cached = await env.MARKET_CACHE.get('tracked_items');
+    const cached = await env.MARKET_CACHE.get('tracked_items_all');
     if (cached) { try { return JSON.parse(cached); } catch { } }
 
+    const items = [];
     try {
-        const limit = Number.parseInt(env.TRACK_LIMIT || '500', 10);
-        const url = `${env.SUPABASE_URL}/rest/v1/tracked_items?select=item,score,active&active=eq.true&order=score.desc&limit=${limit}`;
-        const resp = await fetch(url, {
-            headers: {
-                'apikey': env.SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`
+        const pageSize = Number(env.ITEMS_PAGE_SIZE || 1000);
+        const base = `${env.SUPABASE_URL}/rest/v1/tracked_items?select=item&active=eq.true&order=item.asc`;
+        let offset = 0;
+        while (true) {
+            const resp = await fetch(base, {
+                headers: {
+                    'apikey': env.SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${env.SUPABASE_ANON_KEY}`,
+                    'Range-Unit': 'items',
+                    'Range': `${offset}-${offset + pageSize - 1}`
+                }
+            });
+            if (!resp.ok) {
+                console.error('tracked_items page error:', resp.status);
+                break;
             }
-        });
-        if (resp.ok) {
             const rows = await resp.json();
-            const items = rows.map(r => r.item);
-            if (items.length) {
-                await env.MARKET_CACHE.put('tracked_items', JSON.stringify(items), { expirationTtl: 600 });
-                return items;
-            }
-        } else {
-            console.error('tracked_items error:', resp.status);
+            if (!Array.isArray(rows) || rows.length === 0) break;
+            for (const r of rows) if (r?.item) items.push(r.item);
+            if (rows.length < pageSize) break;
+            offset += pageSize;
+        }
+        if (items.length) {
+            await env.MARKET_CACHE.put('tracked_items_all', JSON.stringify(items), { expirationTtl: 600 });
+            return items;
         }
     } catch (e) {
         console.error('tracked_items fetch failed:', e.message);
     }
 
-    // fallback
+    // fallback if Supabase fails
     return [
         'octavia_prime_set', 'wisp_prime_set', 'volt_prime_set', 'saryn_prime_set',
         'mesa_prime_set', 'nekros_prime_set', 'nova_prime_set', 'rhino_prime_set',
@@ -172,11 +181,6 @@ async function collectOne(item) {
     };
 }
 
-// Tuning: keep below WM 3 rps
-const BATCH_SIZE = 3;        // 3 concurrent requests
-const BATCH_DELAY_MS = 1100; // ~1s between batches
-const FLUSH_EVERY = 20;      // write partial results periodically
-
 async function collectMarketData(env, opts = {}) {
     console.log('ENV CHECK', {
         has_SUPABASE_URL: !!env.SUPABASE_URL,
@@ -189,25 +193,31 @@ async function collectMarketData(env, opts = {}) {
     if (opts.itemsOverride?.length) {
         items = opts.itemsOverride;
     } else {
-        items = await getTrackedItems(env);
+        items = await getTrackedItems(env); // ALL active items (no limit)
     }
 
-    if (opts.limit && opts.limit > 0) {
-        items = items.slice(0, opts.limit);
-    }
-
+    // Manual limit or shard still honored for /collect testing
+    if (opts.limit && opts.limit > 0) items = items.slice(0, opts.limit);
     if (opts.shards && opts.shards > 1) {
         const shardIdx = Number.isFinite(opts.shard) ? opts.shard : defaultShardIndex();
         items = items.filter((_, i) => (i % opts.shards) === shardIdx);
         console.log(`Sharding: ${shardIdx + 1}/${opts.shards} -> ${items.length} items`);
     }
 
+    // Tunables (env or defaults)
+    const BATCH_SIZE = Number(env.BATCH_SIZE || 5);             // concurrent requests
+    const BATCH_PAUSE_MS = Number(env.BATCH_PAUSE_MS || 5000);  // 5s between batches
+    const FLUSH_EVERY = Number(env.FLUSH_EVERY || 50);          // flush every N rows
+
+    console.log(`Collecting ${items.length} items in batches of ${BATCH_SIZE} with ${BATCH_PAUSE_MS}ms pause`);
+
     const pending = [];
     const kvSample = []; // keep last ~50 records for /health
-
     let processed = 0;
+    let batchIndex = 0;
 
     for (const batch of chunk(items, BATCH_SIZE)) {
+        batchIndex++;
         const recs = await Promise.all(batch.map(collectOne));
         for (const r of recs) {
             if (!r) continue;
@@ -220,15 +230,21 @@ async function collectMarketData(env, opts = {}) {
         if (pending.length >= FLUSH_EVERY) {
             await storeInSupabase(env, pending.splice(0));
         }
-        await sleep(BATCH_DELAY_MS);
+
+        // 5s pause between batches to be extra polite with the upstream API
+        await sleep(BATCH_PAUSE_MS);
+        if (batchIndex % 10 === 0) {
+            console.log(`Progress: ${processed}/${items.length} items processed`);
+        }
     }
 
+    // Final flush
     if (pending.length) await storeInSupabase(env, pending);
 
     // Snapshot for /health (guaranteed to have data if anything was collected)
     await env.MARKET_CACHE.put('latest_snapshot', JSON.stringify(kvSample), { expirationTtl: 300 });
 
-    console.log(`Collected ${processed} items; wrote snapshot(${kvSample.length}).`);
+    console.log(`Collected ${processed}/${items.length} items; snapshot(${kvSample.length}) saved.`);
 }
 
 async function storeInSupabase(env, data) {
@@ -245,17 +261,15 @@ async function storeInSupabase(env, data) {
                 'Content-Type': 'application/json',
                 'apikey': env.SUPABASE_ANON_KEY,
                 'Authorization': `Bearer ${auth}`, // service role recommended (bypasses RLS)
-                'Prefer': 'return=representation'   // helpful for logging rows inserted
+                'Prefer': 'return=minimal,resolution=merge-duplicates'
             },
             body: JSON.stringify(data)
         });
-        const text = await resp.text();
         if (!resp.ok) {
+            const text = await resp.text().catch(() => '');
             console.error('Supabase write error:', resp.status, text);
         } else {
-            let rows = 'unknown';
-            try { rows = JSON.parse(text).length; } catch { }
-            console.log(`Supabase wrote ${rows} rows`);
+            console.log(`Supabase wrote ${data.length} rows`);
         }
     } catch (e) {
         console.error('Supabase store error:', e);

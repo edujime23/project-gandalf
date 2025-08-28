@@ -26,7 +26,7 @@
         return out;
     }
 
-    // Whitelist of read-only tables accessible via GET
+    // Read-only tables exposed via GET
     const READ_ONLY = new Set([
         'market_data',
         'predictions',
@@ -37,17 +37,19 @@
         'worldstate_flags',
         'tracked_items',
         'daily_performance',
-        'model_performance'
+        'model_performance',
+        'backtest_results',
+        'portfolio'
     ]);
 
-    // Whitelist of RPC functions allowed from the browser
+    // RPCs allowed from browser
     const RPC_ALLOW = new Set([
         'get_system_metrics',
         'get_enhanced_metrics'
     ]);
 
     try {
-        // Admin route to run analyzer
+        // Admin route
         if (apiPath === 'admin/analyzer/run') {
             const token = request.headers.get('x-admin-token') || url.searchParams.get('token');
             if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
@@ -60,7 +62,22 @@
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // RPC forwarding (browser-safe)
+        // Analyzer namespace (explicit)
+        if (apiPath.startsWith('analyzer/')) {
+            const sub = apiPath.substring('analyzer/'.length);
+            const targetUrl = `${ANALYZER_URL}/api/${sub}${url.search ? '?' + url.searchParams.toString() : ''}`;
+            const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
+        }
+
+        // Analyzer-backed short endpoints (keep signals and patterns only)
+        if (apiPath.startsWith('signals') || apiPath.startsWith('patterns')) {
+            const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
+            const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
+            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
+        }
+
+        // RPC browser-safe forwarding (POST only)
         if (apiPath.startsWith('rpc/')) {
             const fn = apiPath.split('/')[1] || '';
             if (!RPC_ALLOW.has(fn) || request.method !== 'POST') {
@@ -82,15 +99,7 @@
             return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
         }
 
-        // Analyzer-backed endpoints (cached patterns/signals)
-        if (apiPath.startsWith('patterns') || apiPath.startsWith('predictions') || apiPath.startsWith('signals')) {
-            const targetUrl = `${ANALYZER_URL}/api/${apiPath}`;
-            const resp = await fetch(targetUrl, { headers: { 'User-Agent': 'Gandalf-API-Gateway/1.0' } });
-            return new Response(resp.body, { status: resp.status, headers: { ...corsHeaders, ...sanitizeHeaders(resp.headers) } });
-        }
-
-        // Read-only REST passthrough
-        // Only allow GET on whitelisted tables
+        // Default: read-only REST passthrough
         const [root] = apiPath.split('?', 1);
         const table = (root || '').split('/')[0];
         if (request.method !== 'GET' || !READ_ONLY.has(table)) {
@@ -112,13 +121,11 @@
         if (!resp.ok) {
             const errorText = await resp.text().catch(() => '');
             return new Response(JSON.stringify({ error: `Upstream service error: ${resp.status}`, body: errorText }), {
-                status: resp.status,
-                headers: { ...headersCombined, 'Content-Type': 'application/json' }
+                status: resp.status, headers: { ...headersCombined, 'Content-Type': 'application/json' }
             });
         }
 
         return new Response(resp.body, { status: resp.status, headers: headersCombined });
-
     } catch (error) {
         return new Response(JSON.stringify({ error: 'Gateway internal error' }), {
             status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }

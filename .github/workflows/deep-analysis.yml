@@ -1,9 +1,11 @@
-﻿name: Deep Market Analysis
+﻿name: Deep Market Analysis (Daily)
 
 on:
-  schedule:
-    - cron: '0 4 * * *'
+  schedule: [ { cron: '0 4 * * *' } ]  # daily 04:00 UTC
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   analyze-and-store:
@@ -11,15 +13,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-          cache-dependency-path: requirements.txt
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - uses: ./.github/actions/python-setup
       - name: Run analysis
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

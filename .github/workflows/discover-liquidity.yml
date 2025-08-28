@@ -1,9 +1,11 @@
-name: Discover Liquid Items
+name: Discover Liquid Items (Weekly)
 
 on:
-  schedule:
-    - cron: '0 1 * * 0' # Sunday 01:00 UTC
+  schedule: [ { cron: '0 1 * * 0' } ]  # Sun 01:00 UTC
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: discover-liquidity-${{ github.ref }}
@@ -15,15 +17,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-          cache-dependency-path: requirements.txt
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - uses: ./.github/actions/python-setup
       - name: Run discovery
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

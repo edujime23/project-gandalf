@@ -1,9 +1,11 @@
-name: Monitor System Health
+name: Monitor System Health (30m)
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'
+  schedule: [ { cron: '*/30 * * * *' } ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check-health:
@@ -11,6 +13,10 @@ jobs:
     steps:
       - name: Check Worker Health
         run: |
-          curl -s https://gandalf-collector.${{ secrets.WORKER_SUBDOMAIN }}.workers.dev/health || true
-      - name: Check Data Freshness (API health)
-        run: echo "Add API endpoint checks here if needed"
+          set -e
+          curl -sSf https://gandalf-collector.${{ secrets.WORKER_SUBDOMAIN }}.workers.dev/health || true
+      - name: Check Data Freshness
+        run: |
+          curl -sSf "${{ secrets.SUPABASE_URL }}/rest/v1/market_data?select=timestamp&order=timestamp.desc&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" || true

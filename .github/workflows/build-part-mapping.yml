@@ -1,0 +1,27 @@
+name: Build Part/Relic Mapping
+on:
+  schedule:
+    - cron: '30 2 * * 1' # Mondays 02:30 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: build-part-mapping-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install deps
+        run: pip install requests==2.32.5
+      - name: Build and store mapping
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: python scripts/build_part_mapping.py

@@ -6,6 +6,12 @@ account_id = "19d25279bc9bed348875d2f840c48588"
 # Important: Unbound so cron jobs can run longer than the ~30s HTTP waitUntil cap
 usage_model = "unbound"
 
+MAX_ITEMS_PER_INVOCATION = "35"
+BATCH_SIZE = "10"
+BATCH_PAUSE_MS = "4000"
+ITEMS_PAGE_SIZE = "1000"
+SELF_URL = "https://gandalf-collector.psnedujime.workers.dev/collect""
+
 [triggers]
 crons = ["*/5 * * * *"]   # every 5 minutes
 

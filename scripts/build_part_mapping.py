@@ -18,10 +18,8 @@ HDR_WM = {"User-Agent": "Gandalf/1.0", "Accept": "application/json"}
 HDR_SB = {
     "apikey": SUPABASE_KEY,
     "Authorization": "Bearer " + str(SUPABASE_KEY),
-    "Content-Type": "application/json",
-    "Prefer": "return=minimal,resolution=merge-duplicates"
+    "Content-Type": "application/json"
 }
-
 
 def get_tracked_sets(limit=200):
     url = "{0}/rest/v1/tracked_items?select=item,score,active&order=score.desc&limit={1}".format(
@@ -31,7 +29,6 @@ def get_tracked_sets(limit=200):
     r.raise_for_status()
     rows = r.json()
     return [x["item"] for x in rows if isinstance(x.get("item"), str) and x["item"].endswith("_set")]
-
 
 def get_items_in_set(url_name):
     r = requests.get("{0}/items/{1}".format(WF_BASE, url_name), headers=HDR_WM, timeout=30)
@@ -46,18 +43,14 @@ def get_items_in_set(url_name):
         if not iname or not iurl:
             continue
         if iurl == url_name:
-            continue  # skip the aggregate set row
+            continue
         parts.append({"item_name": iname, "url_name": iurl})
     return parts
 
-
 def parse_relic_drop(entry):
     """
-    WarframeStat.us /drops/search returns entries with fields:
-      - place: e.g., "Meso E4 Relic (Intact)" or "Meso E4 Relic (Radiant)"
-      - rarity: "Common" | "Uncommon" | "Rare"
-      - chance: percentage string or number
-    We only take (Intact).
+    Parse intact relic rows from WarframeStat.us /drops/search results.
+    Accepts place strings like: 'Meso E4 Relic (Intact)'.
     """
     place = entry.get("place") or ""
     if "Relic (Intact)" not in place:
@@ -85,7 +78,6 @@ def parse_relic_drop(entry):
         return None
     return {"era": era, "relic_name": relic_name, "rarity": rarity, "drop_chance": round(drop, 6)}
 
-
 def search_drops(part_name):
     q = urllib.parse.quote(part_name)
     url = "{0}/drops/search/{1}".format(WFS_BASE, q)
@@ -102,22 +94,17 @@ def search_drops(part_name):
             out.append(parsed)
     return out
 
+def rpc_upsert_item_parts(rows):
+    url = SUPABASE_URL + "/rest/v1/rpc/upsert_item_parts_json"
+    r = requests.post(url, headers=HDR_SB, data=json.dumps({"rows": rows}), timeout=60)
+    if not r.ok:
+        raise RuntimeError("upsert_item_parts_json failed: {0} {1}".format(r.status_code, r.text))
 
-def upsert_item_parts(rows):
-    if not rows:
-        return
-    url = SUPABASE_URL + "/rest/v1/item_parts?on_conflict=set_item,part_item"
-    r = requests.post(url, headers=HDR_SB, data=json.dumps(rows), timeout=60)
-    r.raise_for_status()
-
-
-def upsert_part_relic_drops(rows):
-    if not rows:
-        return
-    url = SUPABASE_URL + "/rest/v1/part_relic_drops?on_conflict=part_item,relic_name,rarity"
-    r = requests.post(url, headers=HDR_SB, data=json.dumps(rows), timeout=60)
-    r.raise_for_status()
-
+def rpc_upsert_part_relic_drops(rows):
+    url = SUPABASE_URL + "/rest/v1/rpc/upsert_part_relic_drops_json"
+    r = requests.post(url, headers=HDR_SB, data=json.dumps({"rows": rows}), timeout=60)
+    if not r.ok:
+        raise RuntimeError("upsert_part_relic_drops_json failed: {0} {1}".format(r.status_code, r.text))
 
 def main():
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -145,21 +132,26 @@ def main():
                 })
             time.sleep(0.25)
 
+        # Flush every 20 sets to keep payloads small
         if i % 20 == 0:
             if ip_rows:
-                upsert_item_parts(ip_rows)
+                rpc_upsert_item_parts(ip_rows)
                 ip_rows = []
             if pr_rows:
-                upsert_part_relic_drops(pr_rows)
+                # chunk large arrays
+                chunk = 400
+                for j in range(0, len(pr_rows), chunk):
+                    rpc_upsert_part_relic_drops(pr_rows[j:j+chunk])
                 pr_rows = []
 
     if ip_rows:
-        upsert_item_parts(ip_rows)
+        rpc_upsert_item_parts(ip_rows)
     if pr_rows:
-        upsert_part_relic_drops(pr_rows)
+        chunk = 400
+        for j in range(0, len(pr_rows), chunk):
+            rpc_upsert_part_relic_drops(pr_rows[j:j+chunk])
 
     print("Mapping build complete.")
-
 
 if __name__ == "__main__":
     main()

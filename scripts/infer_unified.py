@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import os
 import json
 import math
@@ -9,21 +11,24 @@ import requests
 from datetime import datetime, timezone, timedelta
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE') or os.getenv('SUPABASE_KEY')
+SUPABASE_SERVICE = os.getenv('SUPABASE_SERVICE_ROLE') or os.getenv('SUPABASE_KEY')
+SUPABASE_ANON = os.getenv('SUPABASE_ANON_KEY')
 
 MODEL_PATH = 'models/unified_model.pkl'
 HORIZON_STEPS = int(os.getenv("PRED_HORIZON_STEPS", "6"))
 BLEND_WEIGHT = float(os.getenv("BLEND_WEIGHT", "0.7"))  # model weight; baseline = 1-w
 
 def sb_get(path, params=None, headers=None):
-    headers_all = {'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+    key = SUPABASE_ANON or SUPABASE_SERVICE
+    headers_all = {'apikey': key, 'Authorization': f'Bearer {key}'}
     if headers: headers_all.update(headers)
     r = requests.get(f"{SUPABASE_URL}{path}", headers=headers_all, params=params or {}, timeout=30)
     r.raise_for_status()
     return r
 
 def sb_post(path, body):
-    headers = {'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}', 'Content-Type': 'application/json'}
+    key = SUPABASE_ANON or SUPABASE_SERVICE
+    headers = {'apikey': key, 'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
     r = requests.post(f"{SUPABASE_URL}{path}", headers=headers, data=json.dumps(body), timeout=60)
     r.raise_for_status()
     return r
@@ -49,7 +54,6 @@ def fetch_latest_per_item(item, limit=200):
     return df
 
 def fetch_recent_all(limit=2500):
-    # Grab a window across items to compute market index
     r = sb_get('/rest/v1/market_data', params={'select':'timestamp,sell_median,item','order':'timestamp.desc','limit':str(limit)})
     df = pd.DataFrame(r.json())
     if df.empty: return df
@@ -111,7 +115,6 @@ def create_features(df: pd.DataFrame, item_encoded: int, feature_columns: list, 
     ts = df['timestamp'].iloc[-1]
     hour = ts.hour; dow = ts.dayofweek
 
-    # Market index match by asof
     if index_df is not None and not index_df.empty:
         merge = pd.merge_asof(
             df[['timestamp']].sort_values('timestamp'),
@@ -162,14 +165,13 @@ def create_features(df: pd.DataFrame, item_encoded: int, feature_columns: list, 
         "w_meso": float(era_w.get('Meso',0.25)),
         "w_neo": float(era_w.get('Neo',0.25)),
         "w_axi": float(era_w.get('Axi',0.25)),
-        "fissure_total": 0.0,  # optional; filled below if present in index_df columns (not critical)
+        "fissure_total": 0.0,
         "baro_active": int(baro_active),
         "supply_index": float(supply_index),
 
         "index_price": idx_price, "index_ret_6": idx_ret6, "index_ret_24": idx_ret24, "index_zscore_24": idx_z
     }
 
-    # zscore_24 and volume_ratio computed now
     roll24 = df['sell_median'].astype(float).rolling(24, min_periods=1)
     mu24 = float(roll24.mean().iloc[-1]); sd24 = float(roll24.std().iloc[-1] or 0)
     feat["zscore_24"] = ((feat["price"] - mu24)/sd24) if sd24>0 else 0.0
@@ -179,10 +181,13 @@ def create_features(df: pd.DataFrame, item_encoded: int, feature_columns: list, 
     return X
 
 def store_predictions(preds):
-    if not preds: return
-    headers = {'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}', 'Content-Type': 'application/json', 'Prefer': 'return=minimal,resolution=merge-duplicates'}
-    url = f"{SUPABASE_URL}/rest/v1/predictions?on_conflict=item,predicted_at"
-    r = requests.post(url, headers=headers, data=json.dumps(preds), timeout=60)
+    if not preds:
+        return
+    key = SUPABASE_ANON or SUPABASE_SERVICE
+    headers = {'apikey': key, 'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}
+    url = f"{SUPABASE_URL}/rest/v1/rpc/insert_predictions_bulk"
+    body = {"rows": preds}
+    r = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
     r.raise_for_status()
 
 def main():
@@ -199,7 +204,6 @@ def main():
     items = fetch_tracked_items(limit=40)
     print(f"Active tracked items: {len(items)}")
 
-    # Shared context
     era_w = get_recent_era_weights(hours=6)
     baro_active = 1 if get_baro_active() else 0
     supply_map = get_supply_index_bulk(era_weights=era_w, only_active=True, top_n=1000)
@@ -219,11 +223,9 @@ def main():
             X = create_features(df, code, feature_columns, era_w, float(supply_map.get(it,0.0)), baro_active, index_df)
 
             model_pred = float(model.predict(X)[0])
-            # Linear baseline
             lin_pred = float(linear_projection(df['sell_median'].astype(float), steps=HORIZON_STEPS))
             final_pred = BLEND_WEIGHT * model_pred + (1.0 - BLEND_WEIGHT) * lin_pred
 
-            # Quantile intervals if available; otherwise +/- 1.2*std around blended
             if q_low is not None and q_high is not None:
                 lo = float(q_low.predict(X)[0]); hi = float(q_high.predict(X)[0])
                 lower = min(lo, hi); upper = max(lo, hi)

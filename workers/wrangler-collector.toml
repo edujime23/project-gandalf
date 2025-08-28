@@ -3,8 +3,11 @@ main = "src/collector.js"
 compatibility_date = "2024-01-01"
 account_id = "19d25279bc9bed348875d2f840c48588"
 
+# Important: Unbound so cron jobs can run longer than the ~30s HTTP waitUntil cap
+usage_model = "unbound"
+
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *"]   # every 5 minutes
 
 [[kv_namespaces]]
 binding = "MARKET_CACHE"

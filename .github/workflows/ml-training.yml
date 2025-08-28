@@ -1,4 +1,4 @@
-﻿name: ML Model Training
+name: ML Model Training
 
 on:
   schedule:
@@ -8,18 +8,25 @@ on:
 jobs:
   train-models:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    concurrency:
+      group: ml-training-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
+        with: { python-version: '3.10', cache: 'pip' }
       - name: Install deps
         run: |
-          pip install pandas==2.3.2 numpy==2.2.6 scikit-learn==1.5.2 requests==2.32.5 joblib==1.4.2
+          pip install --upgrade pip
+          pip install pandas==2.3.2 numpy==2.2.6 scikit-learn==1.5.2 requests==2.32.5 joblib==1.4.2 lightgbm==4.5.0 scipy==1.14.1
       - name: Train unified model
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+          TRAIN_DAYS: "30"
+          CV_SPLITS: "3"
+          SEARCH_ITER: "20"
         run: python scripts/train_unified_model.py
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -32,7 +39,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           if [ -d "models" ]; then
-            git add models/
+            git add models/*.pkl models/*.json
             if ! git diff --staged --quiet; then
               git commit -m "chore: update unified ML model [skip ci]"
               git push

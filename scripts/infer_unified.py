@@ -186,7 +186,7 @@ def store_predictions(preds):
     r.raise_for_status()
 
 def main():
-    print("Loading unified model…")
+    print("Loading unified model...")
     bundle = load_model()
     model = bundle['model']
     q_low = bundle.get('quantile_low', None)

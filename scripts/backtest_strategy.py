@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-Backtest engine (remastered):
-- Uses only items with sufficient history to support long features/signals.
-- Execution modes:
-  - mid (default): execute at mid price (average of buy/sell medians); good for signal quality sanity.
-  - realistic: BUY at sell_median, SELL at buy_median (includes spread headwind).
-- Optional slippage and fee.
+Backtest engine (dual-run):
+- Runs both execution modes in one process: mid and realistic.
+- mid: executes at mid price (avg of buy/sell medians); good for signal quality.
+- realistic: BUY at sell_median, SELL at buy_median; includes slippage/fees.
+- Uses only items with sufficient history to support long windows (e.g., lags up to 168).
 - Single position per item with capped sizing.
-- Stores summary metrics in backtest_results and per-trade PnL in profit_tracking.
+- Writes summary to backtest_results and realized PnL to profit_tracking for each mode.
+- Saves artifacts to output/backtest_results_<mode>.json
 """
 
 import os
@@ -27,23 +27,28 @@ SUPABASE_SERVICE_ROLE = os.getenv('SUPABASE_SERVICE_ROLE') or os.getenv('SUPABAS
 # Backtest window
 LOOKBACK_DAYS = int(os.getenv('BACKTEST_DAYS', os.getenv('TRAIN_DAYS', '30')))
 
-# Execution
-EXECUTION_MODE = os.getenv("EXECUTION_MODE", "mid").lower()  # 'mid' or 'realistic'
-SLIPPAGE_PCT = float(os.getenv("SLIPPAGE_PCT", "0.0"))       # e.g., 0.002 -> 0.2%
-FEE_PCT = float(os.getenv("FEE_PCT", "0.0"))                 # e.g., 0.001 -> 0.1%
+# Fallback per-mode params (you can override via env)
+# These are only used if per-mode envs aren't provided.
+FALLBACK_SLIPPAGE_PCT_MID = float(os.getenv("SLIPPAGE_PCT_MID", "0.0"))
+FALLBACK_FEE_PCT_MID      = float(os.getenv("FEE_PCT_MID", "0.0"))
+FALLBACK_SLIPPAGE_PCT_REAL= float(os.getenv("SLIPPAGE_PCT_REALISTIC", os.getenv("SLIPPAGE_PCT", "0.002")))
+FALLBACK_FEE_PCT_REAL     = float(os.getenv("FEE_PCT_REALISTIC", os.getenv("FEE_PCT", "0.001")))
+
+# Which modes to run in one go (default both)
+EXEC_MODES = [m.strip().lower() for m in os.getenv("EXEC_MODES", "mid,realistic").split(",") if m.strip()]
 
 # Position sizing
-INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", "10000"))
-MAX_POSITION_PCT = float(os.getenv("MAX_POSITION_PCT", "0.05"))  # 5% of equity
-MAX_POSITION_VALUE = float(os.getenv("MAX_POSITION_VALUE", "2000"))
+INITIAL_CAPITAL     = float(os.getenv("INITIAL_CAPITAL", "10000"))
+MAX_POSITION_PCT    = float(os.getenv("MAX_POSITION_PCT", "0.05"))  # 5% of equity
+MAX_POSITION_VALUE  = float(os.getenv("MAX_POSITION_VALUE", "2000"))
 
 # Strategy params
 MIN_ITEM_POINTS = int(os.getenv("MIN_ITEM_POINTS", "50"))  # minimum points per item to even consider
-MA_FAST = int(os.getenv("MA_FAST", "5"))
-MA_MID = int(os.getenv("MA_MID", "20"))
-MA_SLOW = int(os.getenv("MA_SLOW", "50"))
-VOL_MA = int(os.getenv("VOL_MA", "20"))
-RSI_PERIOD = int(os.getenv("RSI_PERIOD", "14"))
+MA_FAST   = int(os.getenv("MA_FAST", "5"))
+MA_MID    = int(os.getenv("MA_MID", "20"))
+MA_SLOW   = int(os.getenv("MA_SLOW", "50"))
+VOL_MA    = int(os.getenv("VOL_MA", "20"))
+RSI_PERIOD= int(os.getenv("RSI_PERIOD", "14"))
 VOL_SURGE = float(os.getenv("VOL_SURGE", "1.5"))           # volume > VOL_MA * VOL_SURGE
 
 # Strategy identity
@@ -114,43 +119,45 @@ def safe_mid(row):
     if b and s: return (b + s) / 2.0
     return s if s else (b if b else None)
 
-def exec_price(row, side):
-    """Execution price with mode, slippage, and fee applied."""
-    buy_m = row.get('buy_median')
-    sell_m = row.get('sell_median')
-    buy_m = float(buy_m) if buy_m is not None else None
-    sell_m = float(sell_m) if sell_m is not None else None
-
-    if EXECUTION_MODE == "realistic":
-        base = sell_m if side == 'BUY' else buy_m
-        if base is None:
-            # fallback to mid if one side missing
-            base = safe_mid(row)
-    else:
-        base = safe_mid(row)
-
-    if not base or base <= 0:
-        return 0.0
-
-    # Slippage
-    if SLIPPAGE_PCT > 0:
-        base = base * (1 + SLIPPAGE_PCT) if side == 'BUY' else base * (1 - SLIPPAGE_PCT)
-
-    # Fee
-    if FEE_PCT > 0:
-        base = base * (1 + FEE_PCT) if side == 'BUY' else base * (1 - FEE_PCT)
-
-    return float(base)
-
 class BacktestEngine:
-    def __init__(self, initial_capital=INITIAL_CAPITAL):
+    def __init__(self, *, exec_mode: str, slippage_pct: float, fee_pct: float, initial_capital: float):
+        self.exec_mode = exec_mode
+        self.slippage_pct = float(slippage_pct)
+        self.fee_pct = float(fee_pct)
         self.initial_capital = float(initial_capital)
         self.capital = float(initial_capital)
         self.positions = {}       # item -> {'quantity', 'avg_price', 'entry_time'}
-        self.trades = []          # raw signal executions (for audit)
-        self.realized_trades = [] # closed positions rows for profit_tracking
+        self.trades = []          # raw executions (audit)
+        self.realized_trades = [] # for profit_tracking
         self.equity_curve = []    # [{timestamp, equity, cash}]
         self.active_positions = set()
+
+    def exec_price(self, row, side):
+        """Execution price with mode, slippage, and fee applied."""
+        buy_m = row.get('buy_median')
+        sell_m = row.get('sell_median')
+        buy_m = float(buy_m) if buy_m is not None else None
+        sell_m = float(sell_m) if sell_m is not None else None
+
+        if self.exec_mode == "realistic":
+            base = sell_m if side == 'BUY' else buy_m
+            if base is None:
+                base = safe_mid(row)
+        else:
+            base = safe_mid(row)
+
+        if not base or base <= 0:
+            return 0.0
+
+        # Slippage
+        if self.slippage_pct > 0:
+            base = base * (1 + self.slippage_pct) if side == 'BUY' else base * (1 - self.slippage_pct)
+
+        # Fee
+        if self.fee_pct > 0:
+            base = base * (1 + self.fee_pct) if side == 'BUY' else base * (1 - self.fee_pct)
+
+        return float(base)
 
     def generate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
         """Simple MA crossover + RSI + volume surge. Requires sufficient history."""
@@ -168,14 +175,11 @@ class BacktestEngine:
             item_df['volume'] = (item_df['buy_orders'].fillna(0) + item_df['sell_orders'].fillna(0)).astype(float)
             item_df['volume_ma'] = item_df['volume'].rolling(VOL_MA, min_periods=VOL_MA).mean()
 
-            # iterate starting at index where all indicators valid
             start_idx = max(MA_SLOW, VOL_MA, RSI_PERIOD)
             if len(item_df) <= start_idx:
                 continue
 
-            # Reset position state per item
             in_pos = False
-
             for i in range(start_idx, len(item_df)):
                 row = item_df.iloc[i]
                 prev = item_df.iloc[i-1]
@@ -183,20 +187,15 @@ class BacktestEngine:
                     continue
 
                 buy_score = 0
-                # Golden cross fast over mid
                 if prev['ma_fast'] <= prev['ma_mid'] and row['ma_fast'] > row['ma_mid']:
                     buy_score += 1
-                # Uptrend vs slow
                 if row['sell_median'] > row['ma_slow']:
                     buy_score += 1
-                # RSI recovery
                 if 30 < row['rsi'] < 50 and row['rsi'] > prev['rsi']:
                     buy_score += 1
-                # Volume surge
                 if row['volume_ma'] and row['volume'] > row['volume_ma'] * VOL_SURGE:
                     buy_score += 1
 
-                # BUY
                 if buy_score >= 3 and not in_pos:
                     signals.append({
                         'timestamp': row['timestamp'],
@@ -207,16 +206,12 @@ class BacktestEngine:
                     })
                     in_pos = True
 
-                # SELL if in position
                 if in_pos:
                     sell_score = 0
-                    # Death cross
                     if prev['ma_fast'] >= prev['ma_mid'] and row['ma_fast'] < row['ma_mid']:
                         sell_score += 2
-                    # Overbought exit
                     if row['rsi'] > 70:
                         sell_score += 1
-                    # Protective stop vs slow MA
                     if row['sell_median'] < row['ma_slow'] * 0.97:
                         sell_score += 3
 
@@ -237,22 +232,19 @@ class BacktestEngine:
         if signals.empty:
             return
 
-        # Build map timestamp->list of signals
-        # Use ISO timestamps for robust dict keys
         sig_by_ts = {}
         for _, s in signals.iterrows():
             ts = pd.to_datetime(s['timestamp'], utc=True)
-            key = ts.isoformat()
-            sig_by_ts.setdefault(key, []).append(s.to_dict())
+            sig_by_ts.setdefault(ts, []).append(s.to_dict())
 
-        for ts_val in df['timestamp'].dropna().unique():
-            ts = pd.to_datetime(ts_val, utc=True)
+        for ts in df['timestamp'].dropna().unique():
+            ts = pd.to_datetime(ts, utc=True)
             tick = df[df['timestamp'] == ts]
-            # Handle signals at this ts
-            for sig in sig_by_ts.get(ts.isoformat(), []):
+
+            for sig in sig_by_ts.get(ts, []):
                 self.process_signal(sig, tick)
 
-            # Mark to market
+            # Mark-to-market using mid to avoid spread bias in equity curve
             self.equity_curve.append({
                 'timestamp': ts,
                 'equity': self.calculate_equity(tick),
@@ -267,10 +259,9 @@ class BacktestEngine:
         row = row.iloc[0]
 
         if sig['type'] == 'BUY' and item not in self.positions:
-            price = exec_price(row, 'BUY')
+            price = self.exec_price(row, 'BUY')
             if price <= 0:
                 return
-            # Size
             pos_cap = min(self.capital * MAX_POSITION_PCT, MAX_POSITION_VALUE)
             qty = int(pos_cap // price)
             if qty <= 0:
@@ -283,7 +274,7 @@ class BacktestEngine:
 
         elif sig['type'] == 'SELL' and item in self.positions:
             pos = self.positions[item]
-            price = exec_price(row, 'SELL')
+            price = self.exec_price(row, 'SELL')
             if price <= 0:
                 return
             qty = pos['quantity']
@@ -297,10 +288,10 @@ class BacktestEngine:
                 hold_hours = (close_ts - open_ts).total_seconds() / 3600.0
             except Exception:
                 pass
+
             self.capital += revenue
             self.trades.append({'timestamp': sig['timestamp'], 'item': item, 'type': 'SELL', 'quantity': qty, 'price': price, 'revenue': revenue, 'profit': profit, 'profit_pct': (profit/cost*100) if cost>0 else 0, 'hold_time_hours': hold_hours, 'reason': sig.get('reason')})
 
-            # realized trade for profit_tracking
             self.realized_trades.append({
                 'item': item,
                 'entry_price': float(pos['avg_price']),
@@ -322,8 +313,7 @@ class BacktestEngine:
             row = tick_df[tick_df['item'] == item]
             if row.empty:
                 continue
-            mark = safe_mid(row.iloc[0]) if EXECUTION_MODE == "mid" else safe_mid(row.iloc[0])
-            # Use mid for mark-to-market to avoid systematic spread bias
+            mark = safe_mid(row.iloc[0])  # Always mid for marking
             if mark and mark > 0:
                 equity += pos['quantity'] * float(mark)
         return float(equity)
@@ -331,8 +321,7 @@ class BacktestEngine:
     def calculate_metrics(self):
         if not self.equity_curve:
             return {}
-        eq = pd.DataFrame(self.equity_curve)
-        eq = eq.dropna(subset=['equity'])
+        eq = pd.DataFrame(self.equity_curve).dropna(subset=['equity'])
         if eq.empty:
             return {}
         final_equity = float(eq['equity'].iloc[-1])
@@ -379,25 +368,25 @@ class BacktestEngine:
             'avg_hold_time': avg_hold
         }
 
-    def save_results(self):
+    def save_results(self, mode: str):
         metrics = self.calculate_metrics()
         if not metrics:
-            print("No metrics to save")
+            print(f"[{mode}] No metrics to save")
             return metrics
 
         os.makedirs('output', exist_ok=True)
-        with open('output/backtest_results.json', 'w') as f:
+        with open(f'output/backtest_results_{mode}.json', 'w') as f:
             json.dump({
                 'strategy': STRATEGY_NAME,
-                'execution_mode': EXECUTION_MODE,
-                'slippage_pct': SLIPPAGE_PCT,
-                'fee_pct': FEE_PCT,
+                'execution_mode': mode,
+                'slippage_pct': self.slippage_pct,
+                'fee_pct': self.fee_pct,
                 'run_date': datetime.now(timezone.utc).isoformat(),
                 'metrics': metrics
             }, f, indent=2, default=str)
-        print("Detailed results saved to output/backtest_results.json")
+        print(f"[{mode}] Saved output/backtest_results_{mode}.json")
 
-        # Write summary row to backtest_results
+        # Summary to backtest_results
         st_date = None
         en_date = None
         if self.equity_curve:
@@ -416,9 +405,9 @@ class BacktestEngine:
             'max_drawdown': metrics['max_drawdown'],
             'sharpe_ratio': metrics['sharpe_ratio'],
             'metadata': {
-                'execution_mode': EXECUTION_MODE,
-                'slippage_pct': SLIPPAGE_PCT,
-                'fee_pct': FEE_PCT,
+                'execution_mode': mode,
+                'slippage_pct': self.slippage_pct,
+                'fee_pct': self.fee_pct,
                 'avg_win': metrics['avg_win'],
                 'avg_loss': metrics['avg_loss'],
                 'profit_factor': metrics['profit_factor'],
@@ -430,13 +419,13 @@ class BacktestEngine:
         try:
             r = requests.post(f"{SUPABASE_URL}/rest/v1/backtest_results", headers=sb_headers_json(), data=json.dumps(payload), timeout=40)
             if r.ok:
-                print("Backtest results saved to database")
+                print(f"[{mode}] Backtest results saved to database")
             else:
-                print(f"Failed to save results: {r.status_code} - {r.text}")
+                print(f"[{mode}] Failed to save results: {r.status_code} - {r.text}")
         except Exception as e:
-            print(f"Save summary error: {e}")
+            print(f"[{mode}] Save summary error: {e}")
 
-        # Bulk insert realized trades into profit_tracking (optional but useful)
+        # Bulk insert realized trades into profit_tracking
         if self.realized_trades:
             try:
                 rows = [{
@@ -456,27 +445,35 @@ class BacktestEngine:
                                   data=json.dumps(rows),
                                   timeout=60)
                 if r.ok:
-                    print(f"Wrote {len(rows)} realized trades to profit_tracking")
+                    print(f"[{mode}] Wrote {len(rows)} realized trades to profit_tracking")
                 else:
-                    print(f"Failed to store profit_tracking: {r.status_code} - {r.text}")
+                    print(f"[{mode}] Failed to store profit_tracking: {r.status_code} - {r.text}")
             except Exception as e:
-                print(f"Save trades error: {e}")
+                print(f"[{mode}] Save trades error: {e}")
 
         return metrics
 
+def get_mode_params(mode: str) -> tuple[float, float]:
+    mode = mode.lower()
+    if mode == "realistic":
+        sl = float(os.getenv("SLIPPAGE_PCT_REALISTIC", str(FALLBACK_SLIPPAGE_PCT_REAL)))
+        fe = float(os.getenv("FEE_PCT_REALISTIC", str(FALLBACK_FEE_PCT_REAL)))
+        return sl, fe
+    # mid
+    sl = float(os.getenv("SLIPPAGE_PCT_MID", str(FALLBACK_SLIPPAGE_PCT_MID)))
+    fe = float(os.getenv("FEE_PCT_MID", str(FALLBACK_FEE_PCT_MID)))
+    return sl, fe
+
 def main():
     require_env()
-    print("Starting enhanced backtest...")
-    engine = BacktestEngine(initial_capital=INITIAL_CAPITAL)
-
-    print("Fetching historical data...")
+    print("Starting dual-mode backtest...")
     df = fetch_market_data(days=LOOKBACK_DAYS)
     if df.empty:
         print("No historical data available")
         return
     print(f"Loaded {len(df)} data points from {df['timestamp'].min()} to {df['timestamp'].max()} (items={df['item'].nunique()})")
 
-    # Keep only items that meet a minimum points gate so signals have enough context
+    # Gate items for sufficient history so signals have context
     counts = df.groupby('item')['timestamp'].count()
     items_ok = set(counts[counts >= max(MIN_ITEM_POINTS, REQUIRED_HISTORY_STEPS)].index)
     if not items_ok:
@@ -484,22 +481,33 @@ def main():
         return
     df = df[df['item'].isin(items_ok)].copy()
 
-    print("Generating signals...")
-    signals = engine.generate_signals(df)
-    print(f"Generated {len(signals)} signals")
+    # Generate signals once; replay under each execution mode
+    # Signals are independent of execution assumptions.
+    tmp_engine_for_signals = BacktestEngine(exec_mode="mid", slippage_pct=0.0, fee_pct=0.0, initial_capital=INITIAL_CAPITAL)
+    signals = tmp_engine_for_signals.generate_signals(df)
+    print(f"Signals generated (shared by runs): {len(signals)}")
     if signals.empty:
-        print("No trading signals generated")
+        print("No trading signals generated. Exiting.")
         return
 
-    print("Running backtest...")
-    engine.execute_backtest(df, signals)
+    for mode in EXEC_MODES:
+        if mode not in {"mid", "realistic"}:
+            print(f"Skipping unknown mode: {mode}")
+            continue
+        sl, fe = get_mode_params(mode)
+        print(f"Running mode={mode} slippage={sl} fee={fe}")
+        engine = BacktestEngine(exec_mode=mode, slippage_pct=sl, fee_pct=fe, initial_capital=INITIAL_CAPITAL)
 
-    print("Results:")
-    metrics = engine.calculate_metrics()
-    for k, v in metrics.items():
-        print(f"  {k}: {v}")
+        engine.execute_backtest(df, signals)
 
-    engine.save_results()
+        metrics = engine.calculate_metrics()
+        print(f"[{mode}] Metrics:")
+        for k, v in metrics.items():
+            print(f"  {k}: {v}")
+
+        engine.save_results(mode)
+
+    print("Dual-mode backtest done.")
 
 if __name__ == "__main__":
     main()

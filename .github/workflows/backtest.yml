@@ -23,12 +23,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
-      - name: Run Backtest
+
+      - name: Run Backtest (mid + realistic in one go)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+          BACKTEST_DAYS: '30'
+          EXEC_MODES: 'mid,realistic'
+          # Optional per-mode overrides (defaults shown)
+          SLIPPAGE_PCT_MID: '0.0'
+          FEE_PCT_MID: '0.0'
+          SLIPPAGE_PCT_REALISTIC: '0.002'
+          FEE_PCT_REALISTIC: '0.001'
+          MIN_ITEM_POINTS: '50'
+          REQUIRED_HISTORY_STEPS: '174'
+          INITIAL_CAPITAL: '10000'
+          MAX_POSITION_PCT: '0.05'
+          MAX_POSITION_VALUE: '2000'
+          BACKTEST_STRATEGY_NAME: 'Enhanced_MA_Strategy'
         run: python scripts/backtest_strategy.py
-      - name: Upload Results
+
+      - name: Upload Results (both modes)
         uses: actions/upload-artifact@v4
         with:
           name: backtest-results-${{ github.run_id }}
